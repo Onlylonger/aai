@@ -26,4 +26,9 @@ export const NAVIGATION = [
     path: ROUTES.GENERAL,
     icon: GearIcon,
   },
+  {
+    label: 'test',
+    path: 'demo',
+    icon: GearIcon,
+  },
 ] as const;
