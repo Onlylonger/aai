@@ -40,6 +40,11 @@ export default defineConfig({
   renderer: {
     root: path.join(root, 'src/renderer'),
     base: './',
+    resolve: {
+      alias: {
+        '@': path.join(root, 'src/renderer'),
+      },
+    },
     plugins: [react({}), svgr()],
     server: {
       host: 'localhost',

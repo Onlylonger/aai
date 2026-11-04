@@ -1,4 +1,6 @@
-import { Box, Textarea } from '@mantine/core';
+import { Box, Combobox, Textarea, useCombobox } from '@mantine/core';
+import { useState } from 'react';
+import ChatComposer from './ChatComposer';
 
 export function Chat() {
   return (
@@ -50,12 +52,13 @@ export function Chat() {
             overflow: 'auto',
           }}
         >
-          <Textarea
+          <ChatComposer />
+          {/* <Textarea
             autosize
             minRows={2}
             placeholder="给 AI 发送消息..."
             variant="unstyled"
-          />
+          /> */}
         </Box>
         <Box style={{ flexShrink: 0 }}>Action Block</Box>
       </Box>

@@ -14,7 +14,10 @@
     "allowJs": true,
     "outDir": ".erb/dll",
     "rootDir": ".",
-    "types": ["node", "jest"]
+    "types": ["node", "jest"],
+    "paths": {
+      "@/*": ["./src/renderer/*"]
+    }
   },
   "exclude": [
     "test",
