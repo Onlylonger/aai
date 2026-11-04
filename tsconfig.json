@@ -14,7 +14,12 @@
     "allowJs": true,
     "outDir": ".erb/dll",
     "rootDir": ".",
-    "types": ["node", "jest"]
+    "types": ["node", "jest"],
+    "paths": {
+      "@renderer/*": ["./src/renderer/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@main/*": ["./src/main/*"]
+    }
   },
   "exclude": [
     "test",
@@ -28,6 +33,7 @@
     "src",
     ".erb/configs",
     ".erb/scripts",
+    "drizzle.config.ts",
     "eslint.config.js",
     "jest.config.js",
     "assets",

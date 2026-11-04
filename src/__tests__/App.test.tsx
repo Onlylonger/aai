@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
-import App from '../renderer/App';
+import App from '../renderer/app/App';
 
 describe('App', () => {
   it('renders the home route and project links', () => {

@@ -1,0 +1,61 @@
+import { createHashRouter, Navigate, RouterProvider } from 'react-router-dom';
+
+import { Main } from '@renderer/app/layouts/Main';
+
+import { ROUTES } from './routes';
+
+import { ChatPage } from '@renderer/modules/chat/pages/ChatPage';
+import { ProvidersPage } from '@renderer/modules/providers/pages/ProvidersPage';
+import { GeneralSettingsPage } from '@renderer/modules/settings/pages/GeneralSettingsPage';
+
+import { NotFoundPage } from '@renderer/shared/components/NotFoundPage';
+
+/**
+ * 应用路由配置
+ */
+const router = createHashRouter([
+  {
+    path: ROUTES.HOME,
+    element: <Main />,
+
+    children: [
+      // 默认首页
+      {
+        index: true,
+        element: <Navigate to={ROUTES.CHAT} replace />,
+      },
+
+      // 聊天
+      {
+        path: ROUTES.CHAT,
+        element: <ChatPage />,
+      },
+      {
+        path: ROUTES.CHAT_DETAIL,
+        element: <ChatPage />,
+      },
+
+      // 模型供应商
+      {
+        path: ROUTES.PROVIDERS,
+        element: <ProvidersPage />,
+      },
+
+      // 通用设置
+      {
+        path: ROUTES.GENERAL,
+        element: <GeneralSettingsPage />,
+      },
+
+      // 404
+      {
+        path: '*',
+        element: <NotFoundPage />,
+      },
+    ],
+  },
+]);
+
+export function AppRouter() {
+  return <RouterProvider router={router} />;
+}

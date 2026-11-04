@@ -9,19 +9,15 @@
  * `./release/app/dist/main/main.js` using electron-vite.
  */
 import path from 'path';
-import { app, BrowserWindow, shell, ipcMain } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import log from 'electron-log';
-import MenuBuilder from './menu';
+import MenuBuilder from './modules/menu';
 import { resolveHtmlPath } from './util';
-import startAutoUpdates from './updates';
+import startAutoUpdates from './modules/updates';
+import { registerModules } from './modules/registerModules';
+import { initializeDatabase } from '@main/infrastructure/database/connection';
 
 let mainWindow: BrowserWindow | null = null;
-
-ipcMain.on('ipc-example', async (event, arg) => {
-  const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
-  console.log(msgTemplate(arg));
-  event.reply('ipc-example', msgTemplate('pong'));
-});
 
 if (process.env.NODE_ENV === 'production') {
   process.setSourceMapsEnabled(true);
@@ -64,6 +60,9 @@ const createWindow = async () => {
     icon: getAssetPath('icon.png'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
     },
   });
 
@@ -91,7 +90,25 @@ const createWindow = async () => {
     return { action: 'deny' };
   });
 
-  await mainWindow.loadURL(resolveHtmlPath('index.html'));
+  const win = mainWindow;
+
+  // Dev 下 Vite 冷启动若发现新依赖（如新引入的图标）会重新预构建并触发整页 reload，
+  // 首次 loadURL 会以 ERR_ABORTED(-3) 中断——这是 Vite 的预期行为，页面随后由 Vite
+  // 自己重新加载，窗口保持存活即可，不能当致命错误销毁退出（官方 Vite 文档建议用
+  // optimizeDeps.include 提前声明依赖来避免这类 reload）。生产环境（file://）加载
+  // 失败仍视为致命。
+  try {
+    await win.loadURL(resolveHtmlPath('index.html'));
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      log.warn(
+        '[Window] Initial page load interrupted (Vite will reload the page):',
+        error,
+      );
+    } else {
+      throw error;
+    }
+  }
 };
 
 /**
@@ -122,6 +139,8 @@ function onActivate() {
 app
   .whenReady()
   .then(async () => {
+    initializeDatabase();
+    registerModules();
     await createWindow();
     startAutoUpdates();
     app.on('activate', onActivate);
