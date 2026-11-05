@@ -1,0 +1,229 @@
+/**
+ * Provider 配置的读写入口，IPC（providerIpc）和 main 内部（providerRegistry）都从这里取数。
+ *
+ * - Provider 完全由用户创建（无内置预置），配置落在 SQLite（providers 表）
+ * - apiKey 用 safeStorage 加密后入库；renderer 拿到的 ProviderView 只带 hasApiKey，
+ *   密文和明文永远不出 main 进程
+ * - 表列默认值（温度 / Token 上限等）只由 providerTable 定义，这里创建时不再重复声明
+ */
+import { randomUUID } from 'node:crypto';
+
+import type {
+  ProviderCreate,
+  ProviderId,
+  ProviderProtocol,
+  ProviderRegion,
+  ProviderUpdate,
+  ProviderView,
+} from '@shared/api/provider';
+import {
+  providerProtocolSchema,
+  providerRegionSchema,
+} from '@shared/api/provider';
+import {
+  decryptSecret,
+  encryptSecret,
+} from '@main/infrastructure/security/secretStorage';
+
+import { providerRepo } from './providerRepo';
+import type { ProviderRecord } from './providerTable';
+
+/* ------------------------------------------------------------------ */
+/* 行数据解析                                                          */
+/* ------------------------------------------------------------------ */
+
+/** 解析 models JSON；坏数据或 null 返回 [] */
+function parseModels(json: string | null): string[] {
+  if (!json) return [];
+
+  try {
+    const parsed: unknown = JSON.parse(json);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((m): m is string => typeof m === 'string');
+    }
+  } catch {
+    // 忽略坏数据，按未配置处理
+  }
+
+  return [];
+}
+
+/** 模型列表 → DB 存储形式；空列表存 null */
+function serializeModels(models: string[]): string | null {
+  return models.length > 0 ? JSON.stringify(models) : null;
+}
+
+/** 默认模型必须存在于列表中，否则回落到第一个；列表为空返回 null */
+function resolveDefaultModel(
+  candidate: string | null,
+  models: string[],
+): string | null {
+  return candidate && models.includes(candidate)
+    ? candidate
+    : (models[0] ?? null);
+}
+
+/** DB 的 text 列可能被写入任意值，读出来时按枚举收敛到合法值 */
+function coerceType(value: string): ProviderProtocol {
+  const result = providerProtocolSchema.safeParse(value);
+  return result.success ? result.data : 'openai-compatible';
+}
+
+function coerceRegion(value: string): ProviderRegion {
+  const result = providerRegionSchema.safeParse(value);
+  return result.success ? result.data : 'international';
+}
+
+/** 读取仍有效的行；不存在或已软删除一律视为未找到 */
+function requireActive(id: ProviderId): ProviderRecord {
+  const row = providerRepo.findById(id);
+
+  if (!row || row.deletedAt != null) {
+    throw new Error(`Provider not found: ${id}`);
+  }
+
+  return row;
+}
+
+/** DB 行 → renderer 视图：解析 models、回落 defaultModel、隐藏 apiKey */
+function toView(row: ProviderRecord): ProviderView {
+  const models = parseModels(row.models);
+
+  return {
+    id: row.id,
+    name: row.name,
+    type: coerceType(row.type),
+    region: coerceRegion(row.region),
+    enabled: row.enabled,
+    baseUrl: row.baseUrl,
+    hasApiKey: row.apiKey !== null,
+    models,
+    defaultModel: resolveDefaultModel(row.defaultModel, models),
+    temperature: row.temperature,
+    maxOutputTokens: row.maxOutputTokens,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* PATCH 字段解析（undefined = 保留；空值 = 恢复默认/清除）             */
+/* ------------------------------------------------------------------ */
+
+async function resolveApiKey(
+  patch: string | undefined,
+  current: string | null,
+): Promise<string | null> {
+  if (patch === undefined) return current;
+
+  const value = patch.trim();
+  return value ? encryptSecret(value) : null;
+}
+
+function resolveBaseUrl(
+  patch: string | null | undefined,
+  current: string | null,
+): string | null {
+  if (patch === undefined) return current;
+  if (patch === null) return null;
+  return patch.trim() || null;
+}
+
+/* ------------------------------------------------------------------ */
+/* 公共 API                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * provider 的运行期配置（密钥已解密），供 llm 适配层等 main 内部模块消费。
+ * 不包含渲染层字段（如 hasApiKey），也不应该被传出 main 进程。
+ */
+export interface ProviderRuntimeConfig {
+  enabled: boolean;
+  name: string;
+  type: ProviderProtocol;
+  baseURL?: string;
+  apiKey?: string;
+  /** 默认模型；未设置时为模型列表第一个，列表为空则为 undefined */
+  modelId?: string;
+}
+
+export const providerService = {
+  async list(): Promise<ProviderView[]> {
+    return providerRepo.findAll().map(toView);
+  },
+
+  /** 新建 provider：id 由 main 生成，其余字段走 providerTable 的列默认值 */
+  async create(input: ProviderCreate): Promise<ProviderView> {
+    const now = Date.now();
+
+    const row = providerRepo.insert({
+      id: randomUUID(),
+      name: input.name.trim(),
+      type: input.type,
+      region: input.region,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return toView(row);
+  },
+
+  /**
+   * PATCH 语义：undefined 的字段不修改；baseUrl 传 null / 空串表示恢复协议默认地址；
+   * apiKey 传 '' 表示清除，传新值则加密入库；defaultModel 不在最终模型列表内时忽略。
+   */
+  async update(patch: ProviderUpdate): Promise<ProviderView> {
+    const row = requireActive(patch.id);
+
+    // 模型 ID 去重（IPC 边界不保证唯一性），后续 defaultModel 校验基于最终列表
+    const nextModels =
+      patch.models === undefined
+        ? parseModels(row.models)
+        : [...new Set(patch.models)];
+
+    const nextDefaultModel = resolveDefaultModel(
+      patch.defaultModel !== undefined ? patch.defaultModel : row.defaultModel,
+      nextModels,
+    );
+
+    const next = providerRepo.update(patch.id, {
+      name: patch.name !== undefined ? patch.name : row.name,
+      enabled: patch.enabled ?? row.enabled,
+      baseUrl: resolveBaseUrl(patch.baseUrl, row.baseUrl),
+      apiKey: await resolveApiKey(patch.apiKey, row.apiKey),
+      models:
+        patch.models === undefined ? row.models : serializeModels(nextModels),
+      defaultModel: nextDefaultModel,
+      temperature: patch.temperature ?? row.temperature,
+      maxOutputTokens: patch.maxOutputTokens ?? row.maxOutputTokens,
+      updatedAt: Date.now(),
+    });
+
+    if (!next) {
+      throw new Error(`Provider row missing after update: ${patch.id}`);
+    }
+
+    return toView(next);
+  },
+
+  /** 软删除：行保留在库里（保留用户配置历史），列表与运行时都不再可见 */
+  async delete(id: ProviderId): Promise<void> {
+    requireActive(id);
+    providerRepo.softDelete(id);
+  },
+
+  /** 供 main 内部模块（llm/providerRegistry、llm/providerTest）获取解密后的运行配置 */
+  async getRuntimeConfig(id: ProviderId): Promise<ProviderRuntimeConfig> {
+    const row = requireActive(id);
+    const models = parseModels(row.models);
+
+    return {
+      enabled: row.enabled,
+      name: row.name,
+      type: coerceType(row.type),
+      baseURL: row.baseUrl || undefined,
+      apiKey: row.apiKey ? await decryptSecret(row.apiKey) : undefined,
+      modelId: resolveDefaultModel(row.defaultModel, models) ?? undefined,
+    };
+  },
+};

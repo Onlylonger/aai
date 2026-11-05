@@ -1,15 +1,15 @@
 import { createHashRouter, Navigate, RouterProvider } from 'react-router-dom';
 
-import { Main } from '@/app/layouts/Main';
+import { Main } from '@renderer/app/layouts/Main';
 
 import { ROUTES } from './routes';
 
-import { ChatPage } from '@/modules/chat/pages/ChatPage';
-import { ProvidersPage } from '@/modules/models/pages/ProvidersPage';
-import { ModelsPage } from '@/modules/models/pages/ModelsPage';
-import { GeneralSettingsPage } from '@/modules/settings/pages/GeneralSettingsPage';
+import { ChatPage } from '@renderer/modules/chat/pages/ChatPage';
+import { ProvidersPage } from '@renderer/modules/models/pages/ProvidersPage';
+import { ModelsPage } from '@renderer/modules/models/pages/ModelsPage';
+import { GeneralSettingsPage } from '@renderer/modules/settings/pages/GeneralSettingsPage';
 
-import { NotFoundPage } from '@/shared/components/NotFoundPage';
+import { NotFoundPage } from '@renderer/shared/components/NotFoundPage';
 
 /**
  * 应用路由配置

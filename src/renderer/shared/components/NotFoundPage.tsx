@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { HouseIcon } from '@phosphor-icons/react/dist/csr/House';
-import { ROUTES } from '@/app/router/routes';
+import { ROUTES } from '@renderer/app/router/routes';
 
 export function NotFoundPage() {
   const navigate = useNavigate();

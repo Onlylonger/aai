@@ -1,25 +1,43 @@
 import { useEffect, useRef } from 'react';
 
-import { Alert, Box, Center, Paper, ScrollArea, Stack, Text } from '@mantine/core';
+import {
+  Alert,
+  Box,
+  Center,
+  Paper,
+  ScrollArea,
+  Stack,
+  Text,
+} from '@mantine/core';
 
 import { ChatComposer } from '../components/composer/ChatComposer';
 import { ModelSelect } from '../components/ModelSelect';
 import { subscribeRunEvents, useChatStore } from '../store/chatStore';
 
 import type { ChatMessagePayload } from '../components/composer/types/message';
-import type { ChatMessage } from '../../../../shared/chat';
+import type { ChatMessage } from '@shared/chat';
 
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
-  const waiting = message.status === 'streaming' && !message.text && !message.reasoning;
+  const waiting =
+    message.status === 'streaming' && !message.text && !message.reasoning;
 
   return (
-    <Box style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+    <Box
+      style={{
+        display: 'flex',
+        justifyContent: isUser ? 'flex-end' : 'flex-start',
+      }}
+    >
       <Paper
         p="sm"
         radius="lg"
         maw="80%"
-        bg={isUser ? 'var(--mantine-color-blue-light)' : 'var(--mantine-color-gray-light)'}
+        bg={
+          isUser
+            ? 'var(--mantine-color-blue-light)'
+            : 'var(--mantine-color-gray-light)'
+        }
       >
         {message.reasoning && (
           <Text size="xs" c="dimmed" mb={6} style={{ whiteSpace: 'pre-wrap' }}>
@@ -27,7 +45,10 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           </Text>
         )}
 
-        <Text size="sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+        <Text
+          size="sm"
+          style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+        >
           {waiting ? '思考中…' : message.text}
         </Text>
 
@@ -74,8 +95,19 @@ export function ChatPage() {
   };
 
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <ScrollArea style={{ flex: 1, minHeight: 0 }} p="md" viewportRef={viewportRef}>
+    <Box
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+      }}
+    >
+      <ScrollArea
+        style={{ flex: 1, minHeight: 0 }}
+        p="md"
+        viewportRef={viewportRef}
+      >
         {messages.length === 0 ? (
           <Center h={300}>
             <Text c="dimmed">有什么可以帮你的？</Text>
@@ -99,7 +131,9 @@ export function ChatPage() {
         onSend={handleSend}
         running={running}
         onStop={() => void abort()}
-        toolbarLeft={<ModelSelect value={model} onChange={setModel} disabled={running} />}
+        toolbarLeft={
+          <ModelSelect value={model} onChange={setModel} disabled={running} />
+        }
       />
     </Box>
   );

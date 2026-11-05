@@ -9,8 +9,13 @@
  */
 import { create } from 'zustand';
 
-import type { ChatMessage, RunEvent } from '../../../../shared/chat';
-import type { ModelRef } from '../../../../shared/provider';
+import {
+  CHAT_CHANNELS,
+  CONVERSATION_CHANNELS,
+  type ChatMessage,
+  type RunEvent,
+} from '@shared/chat';
+import type { ModelRef } from '@shared/api/provider';
 
 interface ChatState {
   conversationId?: string;
@@ -70,7 +75,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   async loadConversation(conversationId) {
-    const messages = await window.api.invoke('conversation:messages', {
+    const messages = await window.api.invoke(CONVERSATION_CHANNELS.messages, {
       conversationId,
     });
     set({ conversationId, messages, sendError: undefined });
@@ -87,7 +92,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     sending = true;
     try {
-      const res = await window.api.invoke('chat:send', {
+      const res = await window.api.invoke(CHAT_CHANNELS.send, {
         conversationId,
         text,
         model,
@@ -113,7 +118,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   async abort() {
     const { activeRunId } = get();
     if (activeRunId)
-      await window.api.invoke('chat:abort', { runId: activeRunId });
+      await window.api.invoke(CHAT_CHANNELS.abort, { runId: activeRunId });
   },
 
   applyRunEvent(event) {
@@ -175,7 +180,7 @@ let subscribed = false;
 export function subscribeRunEvents() {
   if (subscribed || !window.api) return;
   subscribed = true;
-  window.api.on('run:event', (event) =>
+  window.api.on(CHAT_CHANNELS.runEvent, (event) =>
     useChatStore.getState().applyRunEvent(event),
   );
 }

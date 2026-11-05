@@ -18,7 +18,10 @@ module.exports = {
   testEnvironmentOptions: {
     url: 'http://localhost/',
   },
-  testPathIgnorePatterns: ['release/app/dist', '.erb/dll'],
+  testPathIgnorePatterns: [
+    'release/app/dist',
+    '.erb/dll',
+  ],
   transform: {
     '\\.(ts|tsx|js|jsx)$': [
       toolingRequire.resolve('ts-jest'),

@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { Select } from '@mantine/core';
 
-import type { ModelRef, ProviderId } from '../../../../shared/provider';
+import type { ModelRef, ProviderId } from '@shared/api/provider';
 import { useProviders } from '../../models/useProviders';
 
 interface ModelSelectProps {
@@ -22,7 +22,10 @@ export function ModelSelect({ value, onChange, disabled }: ModelSelectProps) {
         .filter((p) => p.enabled && p.hasApiKey)
         .map((p) => ({
           group: p.name,
-          items: p.models.map((m) => ({ value: `${p.id}${SEP}${m}`, label: m })),
+          items: p.models.map((m) => ({
+            value: `${p.id}${SEP}${m}`,
+            label: m,
+          })),
         })),
     [providers],
   );

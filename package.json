@@ -41,6 +41,9 @@
     "package": "npm run build && electron-builder build --publish never",
     "rebuild": "electron-rebuild --parallel --types prod,dev,optional --module-dir release/app",
     "start": "electron-vite dev --watch",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
     "test": "jest",
     "test:smoke": "node .erb/scripts/smoke-test.cjs",
     "preview": "electron-vite preview"
@@ -68,6 +71,7 @@
     "@ai-sdk/openai": "^4.0.109",
     "@electron/notarize": "^3.1.1",
     "@mantine/core": "^9.7.4",
+    "@mantine/form": "^9.7.5",
     "@mantine/hooks": "^9.7.4",
     "@phosphor-icons/react": "^2.1.10",
     "@tiptap/extension-document": "^3.32.2",

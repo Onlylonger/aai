@@ -1,7 +1,7 @@
 import { NavLink } from '@mantine/core';
 import { NavLink as RouterNavLink, useLocation } from 'react-router-dom';
 
-import { NAVIGATION } from '@/app/navigation';
+import { NAVIGATION } from '@renderer/app/navigation';
 
 export function SidebarNavigation() {
   const location = useLocation();

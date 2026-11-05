@@ -19,7 +19,7 @@ import type {
   RunEvent,
   SendMessageRequest,
   SendMessageResponse,
-} from '../../shared/chat';
+} from '@shared/chat';
 import { conversationRepo } from '../conversation/conversationRepo';
 import { getLanguageModel } from '../llm/providerRegistry';
 
@@ -61,8 +61,12 @@ export class ChatService {
     if (!text) throw new Error('消息不能为空');
 
     const conversation =
-      (req.conversationId && conversationRepo.getConversation(req.conversationId)) ||
-      conversationRepo.createConversation({ title: text.slice(0, 30), mode: 'chat' });
+      (req.conversationId &&
+        conversationRepo.getConversation(req.conversationId)) ||
+      conversationRepo.createConversation({
+        title: text.slice(0, 30),
+        mode: 'chat',
+      });
 
     // 历史消息要在写入新消息之前取出
     const history = conversationRepo.listMessages(conversation.id);
@@ -146,7 +150,7 @@ export class ChatService {
     };
 
     try {
-      const model = getLanguageModel(req.model);
+      const model = await getLanguageModel(req.model);
       const result = streamText({
         model,
         instructions: SYSTEM_PROMPT,
@@ -199,11 +203,17 @@ export class ChatService {
       }
 
       // 兜底：流结束了但没有收到 finish / abort / error
-      conversationRepo.updateMessage(assistantMessage.id, { text, status: 'done' });
+      conversationRepo.updateMessage(assistantMessage.id, {
+        text,
+        status: 'done',
+      });
       emit({ type: 'run-finish', finishReason: 'other' });
     } catch (error) {
       if (signal.aborted) {
-        conversationRepo.updateMessage(assistantMessage.id, { text, status: 'aborted' });
+        conversationRepo.updateMessage(assistantMessage.id, {
+          text,
+          status: 'aborted',
+        });
         emit({ type: 'run-abort' });
         return;
       }

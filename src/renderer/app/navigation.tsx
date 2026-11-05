@@ -1,4 +1,4 @@
-import { ROUTES } from '@/app/router/routes';
+import { ROUTES } from '@renderer/app/router/routes';
 
 import { ChatCircleIcon } from '@phosphor-icons/react/dist/icons/ChatCircle';
 import { CloudIcon } from '@phosphor-icons/react/dist/icons/Cloud';

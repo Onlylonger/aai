@@ -6,16 +6,22 @@
  */
 import { randomUUID } from 'node:crypto';
 
-import type { ChatMessage, Conversation, ConversationMode } from '../../shared/chat';
+import type { ChatMessage, Conversation, ConversationMode } from '@shared/chat';
 
 export interface ConversationRepo {
-  createConversation(input: { title: string; mode: ConversationMode }): Conversation;
+  createConversation(input: {
+    title: string;
+    mode: ConversationMode;
+  }): Conversation;
   getConversation(id: string): Conversation | undefined;
   listConversations(): Conversation[];
   touchConversation(id: string): void;
 
   addMessage(message: Omit<ChatMessage, 'id' | 'createdAt'>): ChatMessage;
-  updateMessage(id: string, patch: Partial<ChatMessage>): ChatMessage | undefined;
+  updateMessage(
+    id: string,
+    patch: Partial<ChatMessage>,
+  ): ChatMessage | undefined;
   listMessages(conversationId: string): ChatMessage[];
 }
 
@@ -42,7 +48,9 @@ class InMemoryConversationRepo implements ConversationRepo {
   }
 
   listConversations() {
-    return [...this.conversations.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+    return [...this.conversations.values()].sort(
+      (a, b) => b.updatedAt - a.updatedAt,
+    );
   }
 
   touchConversation(id: string) {
@@ -51,7 +59,11 @@ class InMemoryConversationRepo implements ConversationRepo {
   }
 
   addMessage(input: Omit<ChatMessage, 'id' | 'createdAt'>) {
-    const message: ChatMessage = { ...input, id: randomUUID(), createdAt: Date.now() };
+    const message: ChatMessage = {
+      ...input,
+      id: randomUUID(),
+      createdAt: Date.now(),
+    };
     this.messages.set(message.id, message);
     return message;
   }
@@ -70,4 +82,5 @@ class InMemoryConversationRepo implements ConversationRepo {
   }
 }
 
-export const conversationRepo: ConversationRepo = new InMemoryConversationRepo();
+export const conversationRepo: ConversationRepo =
+  new InMemoryConversationRepo();

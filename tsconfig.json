@@ -16,7 +16,9 @@
     "rootDir": ".",
     "types": ["node", "jest"],
     "paths": {
-      "@/*": ["./src/renderer/*"]
+      "@renderer/*": ["./src/renderer/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@main/*": ["./src/main/*"]
     }
   },
   "exclude": [
@@ -31,6 +33,7 @@
     "src",
     ".erb/configs",
     ".erb/scripts",
+    "drizzle.config.ts",
     "eslint.config.js",
     "jest.config.js",
     "assets",

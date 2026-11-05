@@ -8,7 +8,7 @@
  * - main 进程把 Run 过程中发生的一切都转成 RunEvent 推给 renderer，
  *   renderer 只消费事件，不关心底层用的是哪家模型、哪种模式
  */
-import type { ModelRef } from './provider';
+import type { ModelRef } from './api/provider';
 
 export type ConversationMode = 'chat' | 'agent';
 
@@ -92,3 +92,34 @@ export type RunEvent = RunEventBase &
   );
 
 export type RunEventType = RunEvent['type'];
+
+/** Chat 模块的 IPC channel */
+export const CHAT_CHANNELS = {
+  send: 'chat:send',
+  abort: 'chat:abort',
+  /** main → renderer 推送 */
+  runEvent: 'run:event',
+} as const;
+
+/** Conversation 模块的 IPC channel */
+export const CONVERSATION_CHANNELS = {
+  list: 'conversation:list',
+  messages: 'conversation:messages',
+} as const;
+
+/** Chat 模块的 IPC 契约 */
+export interface ChatIpcContract {
+  [CHAT_CHANNELS.send]: [SendMessageRequest, SendMessageResponse];
+  [CHAT_CHANNELS.abort]: [{ runId: string }, void];
+}
+
+/** Conversation 模块的 IPC 契约 */
+export interface ConversationIpcContract {
+  [CONVERSATION_CHANNELS.list]: [void, Conversation[]];
+  [CONVERSATION_CHANNELS.messages]: [{ conversationId: string }, ChatMessage[]];
+}
+
+/** Chat 相关的 main → renderer 推送 */
+export interface ChatIpcEvents {
+  [CHAT_CHANNELS.runEvent]: RunEvent;
+}
