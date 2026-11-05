@@ -75,7 +75,10 @@ export const ChatEditor = forwardRef<ChatEditorRef, ChatEditorProps>(
       };
 
       // 如果发送回调同步抛出异常，则保留编辑器内容
-      onSendRef.current(payload);
+      // 返回 false 表示本次未被接收（如正在生成中），保留编辑器内容
+      if (onSendRef.current(payload) === false) {
+        return;
+      }
 
       // 发送成功后清空并聚焦
       editor.commands.clearContent();

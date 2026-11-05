@@ -9,19 +9,14 @@
  * `./release/app/dist/main/main.js` using electron-vite.
  */
 import path from 'path';
-import { app, BrowserWindow, shell, ipcMain } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import log from 'electron-log';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 import startAutoUpdates from './updates';
+import { registerIpc } from './ipc/registerIpc';
 
 let mainWindow: BrowserWindow | null = null;
-
-ipcMain.on('ipc-example', async (event, arg) => {
-  const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
-  console.log(msgTemplate(arg));
-  event.reply('ipc-example', msgTemplate('pong'));
-});
 
 if (process.env.NODE_ENV === 'production') {
   process.setSourceMapsEnabled(true);
@@ -125,6 +120,8 @@ function onActivate() {
 app
   .whenReady()
   .then(async () => {
+    const { chatService } = registerIpc();
+    app.on('before-quit', () => chatService.abortAll());
     await createWindow();
     startAutoUpdates();
     app.on('activate', onActivate);

@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { Box, Text } from '@mantine/core';
 
@@ -21,12 +22,20 @@ interface ChatComposerProps {
   onSend: (payload: ChatMessagePayload) => void;
   placeholder?: string;
   disabled?: boolean;
+  /** 工具栏左侧额外内容（如模型选择器） */
+  toolbarLeft?: ReactNode;
+  /** 正在生成：禁止发送，显示停止按钮 */
+  running?: boolean;
+  onStop?: () => void;
 }
 
 export function ChatComposer({
   onSend,
   placeholder = '输入消息，使用 @ 引用资源，/ 使用命令...',
   disabled = false,
+  toolbarLeft,
+  running = false,
+  onStop,
 }: ChatComposerProps) {
   const editorRef = useRef<ChatEditorRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -74,6 +83,8 @@ export function ChatComposer({
   // 发送消息
   const handleSend = useCallback(
     (payload: ChatEditorSubmitPayload) => {
+      if (running) return false;
+
       const attachments = getAttachments();
       const files = getFiles();
 
@@ -85,8 +96,9 @@ export function ChatComposer({
 
       // 只有回调正常执行后才清空附件
       clearAttachments();
+      return true;
     },
-    [onSend, getAttachments, getFiles, clearAttachments],
+    [running, onSend, getAttachments, getFiles, clearAttachments],
   );
 
   // 点击发送按钮
@@ -138,9 +150,12 @@ export function ChatComposer({
       <Box className="chat-composer-toolbar">
         <ChatToolbar
           disabled={disabled}
-          canSend={canSendMessage}
+          canSend={canSendMessage && !running}
           onSend={handleClickSend}
           onAddAttachment={handleAddAttachment}
+          leftSection={toolbarLeft}
+          running={running}
+          onStop={onStop}
         />
       </Box>
     </Box>

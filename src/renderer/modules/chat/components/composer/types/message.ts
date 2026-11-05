@@ -28,6 +28,7 @@ export interface ChatEditorProps {
   placeholder?: string;
   disabled?: boolean;
   canSendWithoutText?: boolean;
-  onSend: (payload: ChatEditorSubmitPayload) => void;
+  /** 返回 false 表示未接收，编辑器会保留内容 */
+  onSend: (payload: ChatEditorSubmitPayload) => void | boolean;
   onContentChange?: (text: string) => void;
 }
