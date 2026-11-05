@@ -1,0 +1,130 @@
+.chat-composer {
+  display: flex;
+  flex-direction: column;
+
+  width: auto;
+  min-height: 90px;
+  max-height: 360px;
+
+  box-sizing: border-box;
+  overflow: hidden;
+  flex-shrink: 0;
+
+  margin: 4px 10px;
+  padding: 8px 10px;
+
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 16px;
+
+  background: var(--mantine-color-body);
+}
+
+.chat-composer:focus-within {
+  border-color: var(--mantine-primary-color-filled);
+}
+
+.chat-composer-attachments {
+  flex-shrink: 0;
+}
+
+.chat-editor-wrapper {
+  flex: 1;
+  min-height: 24px;
+  max-height: 200px;
+
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.chat-editor {
+  min-height: 24px;
+  width: 100%;
+  box-sizing: border-box;
+
+  outline: none;
+  border: none;
+
+  font-size: 14px;
+  line-height: 24px;
+
+  color: var(--mantine-color-text);
+
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-editor p {
+  margin: 0;
+}
+
+.chat-editor p + p {
+  margin-top: 4px;
+}
+
+.chat-editor p.is-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--mantine-color-placeholder);
+  pointer-events: none;
+}
+
+.chat-composer-toolbar {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+
+
+/* 附件区域 */
+.chat-composer-attachments {
+  flex-shrink: 0;
+}
+
+/* 附件列表 */
+.chat-attachment-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  padding: 4px 0;
+
+  scrollbar-width: thin;
+}
+
+/* 单个附件 */
+.chat-attachment-item {
+  flex: 0 0 220px;
+  max-width: 220px;
+
+  overflow: hidden;
+}
+
+/* 文件图标 */
+.chat-attachment-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 44px;
+  height: 44px;
+
+  flex-shrink: 0;
+
+  border-radius: 6px;
+
+  background: var(--mantine-color-default-hover);
+  color: var(--mantine-color-dimmed);
+}
+
+/* 附件信息 */
+.chat-attachment-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
