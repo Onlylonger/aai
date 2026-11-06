@@ -8,6 +8,9 @@
  * - main 进程把 Run 过程中发生的一切都转成 RunEvent 推给 renderer，
  *   renderer 只消费事件，不关心底层用的是哪家模型、哪种模式
  */
+import { z } from 'zod';
+
+import { modelRefSchema } from './api/provider';
 import type { ModelRef } from './api/provider';
 
 export type ConversationMode = 'chat' | 'agent';
@@ -38,12 +41,25 @@ export interface Conversation {
   updatedAt: number;
 }
 
-export interface SendMessageRequest {
+/** chat:send 的入参校验（IPC 边界用） */
+export const chatSendSchema = z.object({
   /** 不传表示新建会话 */
-  conversationId?: string;
-  text: string;
-  model: ModelRef;
-}
+  conversationId: z.string().min(1).optional(),
+  text: z.string().trim().min(1, '消息不能为空').max(100_000, '消息过长'),
+  model: modelRefSchema,
+});
+
+export type SendMessageRequest = z.infer<typeof chatSendSchema>;
+
+/** chat:abort 的入参校验 */
+export const chatAbortSchema = z.object({
+  runId: z.string().min(1),
+});
+
+/** conversation:messages 的入参校验 */
+export const conversationMessagesSchema = z.object({
+  conversationId: z.string().min(1),
+});
 
 export interface SendMessageResponse {
   conversationId: string;

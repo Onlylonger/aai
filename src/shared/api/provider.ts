@@ -29,10 +29,12 @@ export const providerIdSchema = z.string().min(1);
 export type ProviderModelId = string;
 
 /** 模型引用：provider + model，作为一次请求「用哪个模型」的唯一标识 */
-export interface ModelRef {
-  providerId: ProviderId;
-  modelId: string;
-}
+export const modelRefSchema = z.object({
+  providerId: z.string().min(1),
+  modelId: z.string().min(1),
+});
+
+export type ModelRef = z.infer<typeof modelRefSchema>;
 
 /** renderer 看到的 provider 配置视图 */
 export interface ProviderView {

@@ -16,6 +16,7 @@
  * - event（main → renderer，推送）：webContents.send / ipcRenderer.on
  */
 import { BrowserWindow, ipcMain } from 'electron';
+import type { IpcMainInvokeEvent, WebContents } from 'electron';
 import log from 'electron-log';
 import type { ZodType } from 'zod';
 
@@ -42,11 +43,14 @@ export type IpcResult<C extends IpcInvokeChannel> = IpcInvokeMap[C][1];
 /** 注册 renderer → main 的调用 */
 export function handle<C extends IpcInvokeChannel>(
   channel: C,
-  handler: (args: IpcArgs<C>) => IpcResult<C> | Promise<IpcResult<C>>,
+  handler: (
+    args: IpcArgs<C>,
+    event: IpcMainInvokeEvent,
+  ) => IpcResult<C> | Promise<IpcResult<C>>,
 ) {
-  ipcMain.handle(channel, async (_event, args: IpcArgs<C>) => {
+  ipcMain.handle(channel, async (event, args: IpcArgs<C>) => {
     try {
-      const res = await handler(args);
+      const res = await handler(args, event);
       log.debug('[ipc]', channel, args, res);
       return res;
     } catch (error) {
@@ -84,9 +88,27 @@ export function handleValidated<
 >(
   channel: C,
   schema: ZodType<S>,
-  handler: (args: S) => IpcResult<C> | Promise<IpcResult<C>>,
+  handler: (
+    args: S,
+    event: IpcMainInvokeEvent,
+  ) => IpcResult<C> | Promise<IpcResult<C>>,
 ) {
-  handle(channel, (args) => handler(parsePayload(schema, args)));
+  handle(channel, (args, event) => handler(parsePayload(schema, args), event));
+}
+
+/**
+ * 定向发送 main → renderer 事件。
+ * 只发给指定的 WebContents（通常是发起本次调用的窗口）；窗口已销毁时静默丢弃，
+ * 状态恢复应依赖数据库而不是事件重放。
+ */
+export function sendTo<C extends IpcEventChannel>(
+  sender: WebContents,
+  channel: C,
+  payload: IpcEventMap[C],
+) {
+  if (!sender.isDestroyed()) {
+    sender.send(channel, payload);
+  }
 }
 
 /** main → renderer 推送，广播给所有窗口（目前只有一个主窗口） */

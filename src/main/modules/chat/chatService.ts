@@ -54,9 +54,12 @@ export class ChatService {
   /** 正在执行的 run，用于取消 */
   private runs = new Map<string, AbortController>();
 
-  constructor(private emit: RunEventEmitter) {}
-
-  send(req: SendMessageRequest): SendMessageResponse {
+  /**
+   * 执行一次 Chat。
+   * emit 由调用方（IPC 层）按运行传入，通常是「只发给发起请求的窗口」；
+   * ChatService 本身不关心事件送往哪里。
+   */
+  send(req: SendMessageRequest, emit: RunEventEmitter): SendMessageResponse {
     const text = req.text.trim();
     if (!text) throw new Error('消息不能为空');
 
@@ -90,8 +93,8 @@ export class ChatService {
     const controller = new AbortController();
     this.runs.set(runId, controller);
 
-    const emit = (payload: RunEventPayload) =>
-      this.emit({
+    const emitEvent = (payload: RunEventPayload) =>
+      emit({
         ...payload,
         runId,
         conversationId: conversation.id,
@@ -105,7 +108,7 @@ export class ChatService {
       messages: [...toModelMessages(history), { role: 'user', content: text }],
       assistantMessage,
       signal: controller.signal,
-      emit,
+      emit: emitEvent,
     }).finally(() => this.runs.delete(runId));
 
     return {
