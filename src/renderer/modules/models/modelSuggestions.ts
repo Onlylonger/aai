@@ -1,8 +1,10 @@
 /**
- * 「添加模型」输入框的候选列表（常见供应商的模型 ID）。
+ * 「添加模型」输入框的候选提示。
  *
- * 仅作为输入建议，不限制用户自由填写；模型 ID 以厂商文档为准，
- * 新增/下线模型时只需要维护这一处。
+ * 只是常见模型 ID 的输入辅助，不代表权威清单：
+ * - 模型可能改名、下线，或只在特定网关/账号下存在
+ * - 用户始终可以自由输入任意模型 ID
+ * 维护时按厂商实际文档更新即可。
  */
 export const MODEL_SUGGESTIONS: { group: string; items: string[] }[] = [
   {
@@ -38,8 +40,3 @@ export const MODEL_SUGGESTIONS: { group: string; items: string[] }[] = [
     items: ['gemini-2.5-pro', 'gemini-2.5-flash'],
   },
 ];
-
-/** 扁平化的模型 ID 列表（列表行的默认模型输入框使用） */
-export const MODEL_SUGGESTION_IDS = MODEL_SUGGESTIONS.flatMap(
-  (group) => group.items,
-);

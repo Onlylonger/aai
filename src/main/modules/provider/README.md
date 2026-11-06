@@ -14,6 +14,8 @@
 | `providerTable.ts` | drizzle 表定义 | ❌ 模块私有 |
 | `providerRepo.ts` | 数据访问（SQL / drizzle 查询） | ❌ 模块私有 |
 | `providerService.ts` | 业务规则（校验、归一化、加解密、视图组装） | ✅ 其他 main 模块按文件名直接引用 |
+| `providerRegistry.ts` | 模型适配：`ModelRef` → AI SDK `LanguageModel` | ✅ chat / 未来的 agent 模块使用 |
+| `providerTest.ts` | 连接测试（发一次极小的真实请求） | ⚠️ 仅 `providerIpc` 内部使用 |
 | `providerIpc.ts` | IPC 注册（声明式接线，校验由基础设施完成） | ⚠️ 仅 `registerProviderIpc()` 供组合根调用 |
 | `provider.constant.ts` | 参考常量（不参与运行时，测试/演示用） | ✅ 按需引用 |
 
@@ -36,17 +38,18 @@ import type { ModelRef, ProviderView } from '@shared/api/provider';
 ### 2. main 进程内（按文件名直接引用）
 
 ```ts
-import { providerService } from '@main/modules/provider/providerService';
+import { getLanguageModel } from '@main/modules/provider/providerRegistry';
 
-const config = await providerService.getRuntimeConfig(id);
+const model = await getLanguageModel({ providerId, modelId });
 ```
 
+- `getLanguageModel({ providerId, modelId })`：把配置解析成 AI SDK 的 `LanguageModel`，
+  chat / 未来的 agent 模块只需依赖这个函数，不关心具体厂商
 - `providerService.getRuntimeConfig(id)`：解密后的运行配置（baseURL、apiKey、默认模型），
-  供 `llm/providerRegistry`、`llm/providerTest` 这类适配层消费
+  供本模块的 `providerRegistry`、`providerTest` 使用
 - `ProviderRuntimeConfig`：上述返回值的类型
 - 模块注册入口：组合根 `main/modules/registerModules.ts` 直接引用 `providerIpc` 的
-  `registerProviderIpc()`；`providerIpc` 依赖 llm 模块做连接测试，不做汇总导出可避免
-  `llm → provider → providerIpc → llm` 的循环依赖
+  `registerProviderIpc()`
 - `list / create / update / delete` 主要供 `providerIpc` 使用；其他 main 模块一般不需要
 
 ### 3. renderer 进程内

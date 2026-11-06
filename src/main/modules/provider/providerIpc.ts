@@ -13,8 +13,8 @@ import {
 } from '@shared/api/provider';
 import { handle, handleValidated } from '@main/infrastructure/ipc';
 
-import { testProviderConnection } from '../llm/providerTest';
 import { providerService } from './providerService';
+import { testProviderConnection } from './providerTest';
 
 export function registerProviderIpc() {
   handle(PROVIDER_CHANNELS.list, () => providerService.list());

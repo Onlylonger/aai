@@ -12,8 +12,8 @@ import type { LanguageModel } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 
 import type { ModelRef } from '@shared/api/provider';
-import { providerService } from '../provider/providerService';
-import type { ProviderRuntimeConfig } from '../provider/providerService';
+import { providerService } from './providerService';
+import type { ProviderRuntimeConfig } from './providerService';
 
 export class ProviderConfigError extends Error {}
 

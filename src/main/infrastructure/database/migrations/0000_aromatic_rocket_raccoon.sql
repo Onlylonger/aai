@@ -9,5 +9,5 @@ CREATE TABLE `providers` (
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
 	`deleted_at` integer,
-	CONSTRAINT "providers_models_json" CHECK("providers"."models" is null or json_valid("providers"."models"))
+	CONSTRAINT "providers_models_json" CHECK("providers"."models" is null or (json_valid("providers"."models") and json_type("providers"."models") = 'array'))
 );

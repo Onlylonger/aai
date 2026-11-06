@@ -26,37 +26,6 @@ import type { ProviderRecord } from './providerTable';
 /* 行数据解析                                                          */
 /* ------------------------------------------------------------------ */
 
-/** 解析 models JSON；坏数据或 null 返回 [] */
-function parseModels(json: string | null): string[] {
-  if (!json) return [];
-
-  try {
-    const parsed: unknown = JSON.parse(json);
-    if (Array.isArray(parsed)) {
-      return parsed.filter((m): m is string => typeof m === 'string');
-    }
-  } catch {
-    // 忽略坏数据，按未配置处理
-  }
-
-  return [];
-}
-
-/** 模型列表 → DB 存储形式；空列表存 null */
-function serializeModels(models: string[]): string | null {
-  return models.length > 0 ? JSON.stringify(models) : null;
-}
-
-/** 默认模型必须存在于列表中，否则回落到第一个；列表为空返回 null */
-function resolveDefaultModel(
-  candidate: string | null,
-  models: string[],
-): string | null {
-  return candidate && models.includes(candidate)
-    ? candidate
-    : (models[0] ?? null);
-}
-
 /** 读取仍有效的行；不存在或已软删除一律视为未找到 */
 function requireActive(id: ProviderId): ProviderRecord {
   const row = providerRepo.findById(id);
@@ -68,9 +37,9 @@ function requireActive(id: ProviderId): ProviderRecord {
   return row;
 }
 
-/** DB 行 → renderer 视图：解析 models、回落 defaultModel、隐藏 apiKey */
+/** DB 行 → renderer 视图：隐藏 apiKey */
 function toView(row: ProviderRecord): ProviderView {
-  const models = parseModels(row.models);
+  const models = row.models ?? [];
 
   return {
     id: row.id,
@@ -79,7 +48,7 @@ function toView(row: ProviderRecord): ProviderView {
     baseUrl: row.baseUrl,
     hasApiKey: row.apiKey !== null,
     models,
-    defaultModel: resolveDefaultModel(row.defaultModel, models),
+    defaultModel: row.defaultModel,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -141,8 +110,8 @@ export const providerService = {
       enabled: input.enabled ?? false,
       baseUrl: resolveBaseUrl(input.baseUrl, null),
       apiKey: await resolveApiKey(input.apiKey, null),
-      models: input.models === undefined ? null : serializeModels(models),
-      defaultModel: resolveDefaultModel(input.defaultModel ?? null, models),
+      models: input.models === undefined ? null : models,
+      defaultModel: input.defaultModel ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -160,21 +129,18 @@ export const providerService = {
     // 模型 ID 去重（IPC 边界不保证唯一性），后续 defaultModel 校验基于最终列表
     const nextModels =
       patch.models === undefined
-        ? parseModels(row.models)
+        ? (row.models ?? [])
         : [...new Set(patch.models)];
 
-    const nextDefaultModel = resolveDefaultModel(
-      patch.defaultModel !== undefined ? patch.defaultModel : row.defaultModel,
-      nextModels,
-    );
+    const nextDefaultModel =
+      patch.defaultModel !== undefined ? patch.defaultModel : row.defaultModel;
 
     const next = providerRepo.update(patch.id, {
       name: patch.name !== undefined ? patch.name : row.name,
       enabled: patch.enabled ?? row.enabled,
       baseUrl: resolveBaseUrl(patch.baseUrl, row.baseUrl),
       apiKey: await resolveApiKey(patch.apiKey, row.apiKey),
-      models:
-        patch.models === undefined ? row.models : serializeModels(nextModels),
+      models: patch.models === undefined ? row.models : nextModels,
       defaultModel: nextDefaultModel,
       updatedAt: Date.now(),
     });
@@ -192,17 +158,16 @@ export const providerService = {
     providerRepo.softDelete(id);
   },
 
-  /** 供 main 内部模块（llm/providerRegistry、llm/providerTest）获取解密后的运行配置 */
+  /** 供本模块的 providerRegistry / providerTest 获取解密后的运行配置 */
   async getRuntimeConfig(id: ProviderId): Promise<ProviderRuntimeConfig> {
     const row = requireActive(id);
-    const models = parseModels(row.models);
 
     return {
       enabled: row.enabled,
       name: row.name,
       baseURL: row.baseUrl || undefined,
       apiKey: row.apiKey ? await decryptSecret(row.apiKey) : undefined,
-      modelId: resolveDefaultModel(row.defaultModel, models) ?? undefined,
+      modelId: row.defaultModel ?? undefined,
     };
   },
 };

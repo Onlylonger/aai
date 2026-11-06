@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1f538750-01e4-4039-ac0b-3938887efd26",
+  "id": "dc1d7ebf-7e2f-44ce-90d3-748fb0626659",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "providers": {
@@ -86,7 +86,7 @@
       "checkConstraints": {
         "providers_models_json": {
           "name": "providers_models_json",
-          "value": "\"providers\".\"models\" is null or json_valid(\"providers\".\"models\")"
+          "value": "\"providers\".\"models\" is null or (json_valid(\"providers\".\"models\") and json_type(\"providers\".\"models\") = 'array')"
         }
       }
     }

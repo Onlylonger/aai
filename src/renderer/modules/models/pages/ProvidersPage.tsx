@@ -31,7 +31,6 @@ import type {
   ProviderView,
 } from '@shared/api/provider';
 import { ProviderDetailDrawer } from '../components/ProviderDetailDrawer';
-import { MODEL_SUGGESTION_IDS } from '../modelSuggestions';
 import { useProviders } from '../useProviders';
 
 /** 顶部统计块 */
@@ -72,21 +71,17 @@ function ProviderRow({
 
   const applyDefaultModel = (input: string) => {
     const modelId = input.trim();
-    if (!modelId || modelId === provider.defaultModel) return;
-
-    // 输入的模型不在列表里时，一并补进模型列表
-    const models = provider.models.includes(modelId)
-      ? provider.models
-      : [...provider.models, modelId];
+    if (
+      !modelId ||
+      modelId === provider.defaultModel ||
+      !provider.models.includes(modelId)
+    ) {
+      return;
+    }
 
     setModelInput(modelId);
-    void onUpdate({ id: provider.id, models, defaultModel: modelId });
+    void onUpdate({ id: provider.id, defaultModel: modelId });
   };
-
-  // 候选 = 已配置的模型 + 常见模型 ID（选中未配置的会自动加入列表）
-  const modelOptions = [
-    ...new Set([...provider.models, ...MODEL_SUGGESTION_IDS]),
-  ];
 
   return (
     // 行内含 ActionIcon / Autocomplete / Switch，HTML 不允许 button 嵌套 button，
@@ -140,12 +135,14 @@ function ProviderRow({
                 <Autocomplete
                   size="xs"
                   w={200}
-                  data={modelOptions}
+                  data={provider.models}
                   value={modelInput}
                   onChange={setModelInput}
                   onOptionSubmit={(value) => applyDefaultModel(value)}
-                  placeholder="选择或输入模型"
-                  limit={10}
+                  disabled={provider.models.length === 0}
+                  placeholder={
+                    provider.models.length === 0 ? '暂无模型' : '选择或输入模型'
+                  }
                   aria-label={`${provider.name} 的默认模型`}
                 />
               </Box>

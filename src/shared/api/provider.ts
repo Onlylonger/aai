@@ -5,7 +5,7 @@
  * - id 由 main 生成（uuid）；name 是用户输入
  * - 统一使用 OpenAI 兼容协议，厂商差异通过 baseUrl 表达
  * - api_key 密文永不离开 main 进程，renderer 只拿到 hasApiKey
- * - models 在 main 侧解析为 string[]；defaultModel 不在列表内时回落第一个
+ * - models 在 main 侧解析为 string[]；defaultModel 为 null 表示未选择
  *
  * zod schema 定义在这里（zod 是纯 JS，双进程都能用），作为 IPC 边界的运行期校验与
  * 类型的单一来源：renderer 表单用它做 UX 校验，main 在 handle() 入口用它校验
@@ -20,6 +20,13 @@ export type ProviderId = string;
 
 /** provider id 入参的运行期校验（IPC 边界用） */
 export const providerIdSchema = z.string().min(1);
+
+/**
+ * 单个模型 ID。
+ * 就是调用 API 时传给 `model` 参数的字符串（如 "deepseek-chat"），
+ * 当前不携带显示名、上下文长度等元数据。
+ */
+export type ProviderModelId = string;
 
 /** 模型引用：provider + model，作为一次请求「用哪个模型」的唯一标识 */
 export interface ModelRef {
@@ -41,10 +48,10 @@ export interface ProviderView {
   /** 是否已配置 API Key（密文不出 main 进程） */
   hasApiKey: boolean;
 
-  /** 模型列表（已解析），可能为空数组 */
-  models: string[];
+  /** 模型 ID 列表（已解析），可能为空数组 */
+  models: ProviderModelId[];
 
-  /** 默认调用的模型 id；未设置或不在列表内时回落为第一个模型 */
+  /** 默认调用的模型 id；null 表示未选择 */
   defaultModel: string | null;
 
   createdAt: number;
@@ -57,7 +64,7 @@ export interface ProviderView {
  * - apiKey：undefined 表示不修改；'' 表示清除
  * - baseUrl：null / 空串表示恢复官方默认地址
  * - models：空数组表示清空模型列表
- * - defaultModel：null 表示清空（回落第一个模型）；不在模型列表内的值会被忽略
+ * - defaultModel：null 表示清空；其他值按传入值存储
  */
 export const providerUpdateSchema = z.object({
   id: z.string().min(1),

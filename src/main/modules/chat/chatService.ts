@@ -21,7 +21,7 @@ import type {
   SendMessageResponse,
 } from '@shared/chat';
 import { conversationRepo } from '../conversation/conversationRepo';
-import { getLanguageModel } from '../llm/providerRegistry';
+import { getLanguageModel } from '../provider/providerRegistry';
 
 /** 事件发射器：由 IPC 层注入，ChatService 不直接依赖 BrowserWindow */
 export type RunEventEmitter = (event: RunEvent) => void;

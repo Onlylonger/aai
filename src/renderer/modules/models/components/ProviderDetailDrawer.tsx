@@ -468,6 +468,7 @@ export function ProviderDetailDrawer({
                       setNewModel(value);
                       setAddError(null);
                     }}
+                    // 选中候选时直接加入；自由输入则点「添加」
                     onOptionSubmit={(value) => addModel(value)}
                   />
                   <Button
