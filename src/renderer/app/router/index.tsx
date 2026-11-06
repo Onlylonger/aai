@@ -5,8 +5,7 @@ import { Main } from '@renderer/app/layouts/Main';
 import { ROUTES } from './routes';
 
 import { ChatPage } from '@renderer/modules/chat/pages/ChatPage';
-import { ProvidersPage } from '@renderer/modules/models/pages/ProvidersPage';
-import { ModelsPage } from '@renderer/modules/models/pages/ModelsPage';
+import { ProvidersPage } from '@renderer/modules/providers/pages/ProvidersPage';
 import { GeneralSettingsPage } from '@renderer/modules/settings/pages/GeneralSettingsPage';
 
 import { NotFoundPage } from '@renderer/shared/components/NotFoundPage';
@@ -40,12 +39,6 @@ const router = createHashRouter([
       {
         path: ROUTES.PROVIDERS,
         element: <ProvidersPage />,
-      },
-
-      // 模型管理
-      {
-        path: ROUTES.MODELS,
-        element: <ModelsPage />,
       },
 
       // 通用设置

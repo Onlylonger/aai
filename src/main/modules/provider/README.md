@@ -54,8 +54,11 @@ const model = await getLanguageModel({ providerId, modelId });
 
 ### 3. renderer 进程内
 
-- 数据统一走 `@shared/api/provider` 的类型与 channel，通过 `window.api.invoke` 调用
-- `useProviders` 是 models 模块内部的 hook，不作为跨模块 API
+- 数据统一走 `@shared/api/provider` 的类型与 channel；组件不直接碰 IPC
+- `providerStore.ts` 是 provider 模块在 renderer 侧的单一数据源（zustand）：
+  组件直接使用 `useProviderStore`；`load()` 由 `Main` 布局在应用启动时触发一次，
+  store 内部按 `loading` / `loaded` 去重。chat 的 `ModelSelect` 也消费同一份数据，
+  修改状态结构或 actions 时需同步检查
 
 ## 不要这样做
 

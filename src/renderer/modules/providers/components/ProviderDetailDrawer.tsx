@@ -235,10 +235,6 @@ export function ProviderDetailDrawer({
     }
   };
 
-  const setDefaultModel = (modelId: string) => {
-    form.setFieldValue('defaultModel', modelId);
-  };
-
   /** 连接测试：main 侧发一次极小的真实请求，成功/失败都落到结果条 */
   const runTest = async () => {
     if (!provider) return;
@@ -375,79 +371,85 @@ export function ProviderDetailDrawer({
                 选择一项作为默认调用模型；删除后自动回落到第一个。
               </Text>
 
-              {form.values.models.map((modelId) => (
-                <Paper key={modelId} withBorder radius="md" p="xs">
-                  {editingId === modelId ? (
-                    <Group gap="xs" wrap="nowrap">
-                      <TextInput
-                        flex={1}
-                        size="xs"
-                        value={editingValue}
-                        onChange={(event) =>
-                          setEditingValue(event.currentTarget.value)
-                        }
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') renameModel(modelId);
-                          if (event.key === 'Escape') setEditingId(null);
-                        }}
-                      />
-                      <ActionIcon
-                        variant="light"
-                        color="blue"
-                        aria-label="确认"
-                        onClick={() => renameModel(modelId)}
-                      >
-                        <CheckIcon size={16} />
-                      </ActionIcon>
-                      <ActionIcon
-                        variant="light"
-                        color="gray"
-                        aria-label="取消"
-                        onClick={() => setEditingId(null)}
-                      >
-                        <XIcon size={16} />
-                      </ActionIcon>
-                    </Group>
-                  ) : (
-                    <Group justify="space-between" wrap="nowrap" gap="sm">
-                      <Group gap="xs" wrap="nowrap">
-                        <Radio
-                          checked={form.values.defaultModel === modelId}
-                          onChange={() => setDefaultModel(modelId)}
-                          aria-label={`将 ${modelId} 设为默认`}
-                        />
-                        <Text fw={500}>{modelId}</Text>
-                        {form.values.defaultModel === modelId && (
-                          <Badge size="xs" variant="light" color="green">
-                            默认
-                          </Badge>
-                        )}
-                      </Group>
-                      <Group gap={4} wrap="nowrap">
-                        <ActionIcon
-                          variant="subtle"
-                          color="gray"
-                          aria-label={`编辑 ${modelId}`}
-                          onClick={() => {
-                            setEditingId(modelId);
-                            setEditingValue(modelId);
-                          }}
-                        >
-                          <PencilSimpleIcon size={16} />
-                        </ActionIcon>
-                        <ActionIcon
-                          variant="subtle"
-                          color="red"
-                          aria-label={`删除 ${modelId}`}
-                          onClick={() => removeModel(modelId)}
-                        >
-                          <TrashIcon size={16} />
-                        </ActionIcon>
-                      </Group>
-                    </Group>
-                  )}
-                </Paper>
-              ))}
+              <Radio.Group
+                value={form.values.defaultModel ?? ''}
+                onChange={(value) => form.setFieldValue('defaultModel', value)}
+              >
+                <Stack gap="xs">
+                  {form.values.models.map((modelId) => (
+                    <Paper key={modelId} withBorder radius="md" p="xs">
+                      {editingId === modelId ? (
+                        <Group gap="xs" wrap="nowrap">
+                          <TextInput
+                            flex={1}
+                            size="xs"
+                            value={editingValue}
+                            onChange={(event) =>
+                              setEditingValue(event.currentTarget.value)
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') renameModel(modelId);
+                              if (event.key === 'Escape') setEditingId(null);
+                            }}
+                          />
+                          <ActionIcon
+                            variant="light"
+                            color="blue"
+                            aria-label="确认"
+                            onClick={() => renameModel(modelId)}
+                          >
+                            <CheckIcon size={16} />
+                          </ActionIcon>
+                          <ActionIcon
+                            variant="light"
+                            color="gray"
+                            aria-label="取消"
+                            onClick={() => setEditingId(null)}
+                          >
+                            <XIcon size={16} />
+                          </ActionIcon>
+                        </Group>
+                      ) : (
+                        <Group justify="space-between" wrap="nowrap" gap="sm">
+                          <Group gap="xs" wrap="nowrap">
+                            <Radio
+                              value={modelId}
+                              aria-label={`将 ${modelId} 设为默认`}
+                            />
+                            <Text fw={500}>{modelId}</Text>
+                            {form.values.defaultModel === modelId && (
+                              <Badge size="xs" variant="light" color="green">
+                                默认
+                              </Badge>
+                            )}
+                          </Group>
+                          <Group gap={4} wrap="nowrap">
+                            <ActionIcon
+                              variant="subtle"
+                              color="gray"
+                              aria-label={`编辑 ${modelId}`}
+                              onClick={() => {
+                                setEditingId(modelId);
+                                setEditingValue(modelId);
+                              }}
+                            >
+                              <PencilSimpleIcon size={16} />
+                            </ActionIcon>
+                            <ActionIcon
+                              variant="subtle"
+                              color="red"
+                              aria-label={`删除 ${modelId}`}
+                              onClick={() => removeModel(modelId)}
+                            >
+                              <TrashIcon size={16} />
+                            </ActionIcon>
+                          </Group>
+                        </Group>
+                      )}
+                    </Paper>
+                  ))}
+                </Stack>
+              </Radio.Group>
 
               {form.values.models.length === 0 && (
                 <Text c="dimmed" size="sm">

@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { Select } from '@mantine/core';
 
 import type { ModelRef, ProviderId } from '@shared/api/provider';
-import { useProviders } from '../../models/useProviders';
+import { useProviderStore } from '../../providers/providerStore';
 
 interface ModelSelectProps {
   value?: ModelRef;
@@ -14,7 +14,7 @@ const SEP = '::';
 
 /** 只列出「已启用且配置了 API Key」的 provider 下的模型 */
 export function ModelSelect({ value, onChange, disabled }: ModelSelectProps) {
-  const { providers } = useProviders();
+  const providers = useProviderStore((state) => state.providers);
 
   const data = useMemo(
     () =>

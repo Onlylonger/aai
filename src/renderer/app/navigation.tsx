@@ -2,7 +2,6 @@ import { ROUTES } from '@renderer/app/router/routes';
 
 import { ChatCircleIcon } from '@phosphor-icons/react/dist/icons/ChatCircle';
 import { CloudIcon } from '@phosphor-icons/react/dist/icons/Cloud';
-import { BrainIcon } from '@phosphor-icons/react/dist/icons/Brain';
 import { GearIcon } from '@phosphor-icons/react/dist/icons/Gear';
 
 export const NAVIGATION = [
@@ -15,11 +14,6 @@ export const NAVIGATION = [
     label: '模型供应商',
     path: ROUTES.PROVIDERS,
     icon: CloudIcon,
-  },
-  {
-    label: '模型管理',
-    path: ROUTES.MODELS,
-    icon: BrainIcon,
   },
   {
     label: '通用设置',

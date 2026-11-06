@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 import {
   Avatar,
   Box,
@@ -12,11 +14,18 @@ import { Outlet } from 'react-router-dom';
 import { CaretRightIcon } from '@phosphor-icons/react/dist/icons/CaretRight';
 import { GearIcon } from '@phosphor-icons/react/dist/icons/Gear';
 
+import { useProviderStore } from '@renderer/modules/providers/providerStore';
+
 import { SidebarNavigation } from './SidebarNavigation';
 
 import classes from './Main.module.css';
 
 export function Main() {
+  // 应用启动时加载一次供应商配置（store 内部已去重）
+  useEffect(() => {
+    void useProviderStore.getState().load();
+  }, []);
+
   return (
     <Splitter className={classes.layout} withHandle={false}>
       {/* 左侧 Sidebar */}

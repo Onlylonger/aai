@@ -10,7 +10,6 @@ export const ROUTES = {
   CHAT_DETAIL: '/chat/:id',
 
   PROVIDERS: '/settings/providers',
-  MODELS: '/settings/models',
   GENERAL: '/settings/general',
 } as const;
 
@@ -20,12 +19,9 @@ export const ROUTES = {
 export const ROUTE_PATHS = {
   chat: () => ROUTES.CHAT,
 
-  chatDetail: (id: string) =>
-    `/chat/${encodeURIComponent(id)}`,
+  chatDetail: (id: string) => `/chat/${encodeURIComponent(id)}`,
 
   providers: () => ROUTES.PROVIDERS,
-
-  models: () => ROUTES.MODELS,
 
   general: () => ROUTES.GENERAL,
 } as const;
@@ -39,7 +35,6 @@ export const RESTORABLE_ROUTES = [
   ROUTES.CHAT,
   ROUTES.CHAT_DETAIL,
   ROUTES.PROVIDERS,
-  ROUTES.MODELS,
   ROUTES.GENERAL,
 ] as const;
 
