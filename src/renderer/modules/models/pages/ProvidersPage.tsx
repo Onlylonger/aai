@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type SyntheticEvent } from 'react';
 
 import {
   ActionIcon,
+  Autocomplete,
   Avatar,
-  Badge,
   Box,
   Button,
   Divider,
@@ -12,6 +12,7 @@ import {
   Paper,
   ScrollArea,
   Stack,
+  Switch,
   Text,
   TextInput,
   Title,
@@ -20,22 +21,18 @@ import {
 
 import { CaretRightIcon } from '@phosphor-icons/react/dist/icons/CaretRight';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/icons/MagnifyingGlass';
+import { PencilSimpleIcon } from '@phosphor-icons/react/dist/icons/PencilSimple';
 import { PlusIcon } from '@phosphor-icons/react/dist/icons/Plus';
 import { TrashIcon } from '@phosphor-icons/react/dist/icons/Trash';
 
 import type {
   ProviderId,
-  ProviderRegion,
+  ProviderUpdate,
   ProviderView,
 } from '@shared/api/provider';
-import { ProviderCreateDrawer } from '../components/ProviderCreateDrawer';
 import { ProviderDetailDrawer } from '../components/ProviderDetailDrawer';
+import { MODEL_SUGGESTION_IDS } from '../modelSuggestions';
 import { useProviders } from '../useProviders';
-
-const REGION_LABEL: Record<ProviderRegion, string> = {
-  international: '国际模型',
-  domestic: '国产模型',
-};
 
 /** 顶部统计块 */
 function StatBlock({ value, label }: { value: number; label: string }) {
@@ -51,20 +48,48 @@ function StatBlock({ value, label }: { value: number; label: string }) {
   );
 }
 
-/** 供应商列表项：头像 + 名称/模型数 + 地区徽标 + 删除 + 箭头 */
+/** 供应商列表项：头像 + 名称/默认模型 + 启用开关 + 编辑 + 删除 + 箭头 */
 function ProviderRow({
   provider,
   selected,
   onSelect,
   onDelete,
+  onUpdate,
 }: {
   provider: ProviderView;
   selected: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  onUpdate: (patch: ProviderUpdate) => Promise<unknown>;
 }) {
+  // 行内的下拉 / 开关不应触发行点击（打开详情）
+  const stopRowEvents = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
+
+  // 默认模型输入：本地草稿，选中候选后立即应用
+  const [modelInput, setModelInput] = useState(provider.defaultModel ?? '');
+
+  const applyDefaultModel = (input: string) => {
+    const modelId = input.trim();
+    if (!modelId || modelId === provider.defaultModel) return;
+
+    // 输入的模型不在列表里时，一并补进模型列表
+    const models = provider.models.includes(modelId)
+      ? provider.models
+      : [...provider.models, modelId];
+
+    setModelInput(modelId);
+    void onUpdate({ id: provider.id, models, defaultModel: modelId });
+  };
+
+  // 候选 = 已配置的模型 + 常见模型 ID（选中未配置的会自动加入列表）
+  const modelOptions = [
+    ...new Set([...provider.models, ...MODEL_SUGGESTION_IDS]),
+  ];
+
   return (
-    // 行内含删除用 ActionIcon（也是 button），HTML 不允许 button 嵌套 button，
+    // 行内含 ActionIcon / Autocomplete / Switch，HTML 不允许 button 嵌套 button，
     // 所以容器降级为 div，补 role/tabIndex/键盘激活保持可访问性
     <UnstyledButton
       component="div"
@@ -82,11 +107,12 @@ function ProviderRow({
       p="md"
       style={{
         borderRadius: 'var(--mantine-radius-md)',
-        border: '1px solid var(--mantine-color-gray-3)',
-        // 选中态用内阴影画第二圈，避免 2px border 挤动布局
-        boxShadow: selected
-          ? 'inset 0 0 0 1px var(--mantine-color-blue-6)'
-          : undefined,
+        // 蓝框表示已启用；未启用保持灰色边框
+        border: `1px solid ${
+          provider.enabled
+            ? 'var(--mantine-color-blue-6)'
+            : 'var(--mantine-color-gray-3)'
+        }`,
         background: selected
           ? 'var(--mantine-color-body)'
           : 'var(--mantine-color-gray-0)',
@@ -106,18 +132,55 @@ function ProviderRow({
           </Avatar>
           <Stack gap={2} align="flex-start">
             <Text fw={600}>{provider.name}</Text>
-            <Text size="sm" c="dimmed">
-              {provider.models.length} 个模型
-            </Text>
+            <Group gap="xs" wrap="nowrap">
+              <Text size="sm" c="dimmed">
+                默认模型
+              </Text>
+              <Box onClick={stopRowEvents} onKeyDown={stopRowEvents}>
+                <Autocomplete
+                  size="xs"
+                  w={200}
+                  data={modelOptions}
+                  value={modelInput}
+                  onChange={setModelInput}
+                  onOptionSubmit={(value) => applyDefaultModel(value)}
+                  placeholder="选择或输入模型"
+                  limit={10}
+                  aria-label={`${provider.name} 的默认模型`}
+                />
+              </Box>
+              <Text size="sm" c="dimmed">
+                · {provider.models.length} 个模型
+              </Text>
+            </Group>
           </Stack>
         </Group>
         <Group gap="xs" wrap="nowrap">
-          <Badge
-            variant="light"
-            color={provider.region === 'domestic' ? 'blue' : 'gray'}
+          <Box onClick={stopRowEvents} onKeyDown={stopRowEvents}>
+            <Switch
+              size="sm"
+              checked={provider.enabled}
+              onChange={(event) => {
+                void onUpdate({
+                  id: provider.id,
+                  enabled: event.currentTarget.checked,
+                });
+              }}
+              aria-label={`启用 ${provider.name}`}
+            />
+          </Box>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            aria-label={`编辑 ${provider.name}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect();
+            }}
+            onKeyDown={stopRowEvents}
           >
-            {REGION_LABEL[provider.region]}
-          </Badge>
+            <PencilSimpleIcon size={16} />
+          </ActionIcon>
           <ActionIcon
             variant="subtle"
             color="gray"
@@ -126,6 +189,7 @@ function ProviderRow({
               event.stopPropagation();
               onDelete();
             }}
+            onKeyDown={stopRowEvents}
           >
             <TrashIcon size={16} />
           </ActionIcon>
@@ -145,7 +209,6 @@ export function ProvidersPage() {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<ProviderId | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<'add' | 'edit'>('add');
   const [deleteTarget, setDeleteTarget] = useState<ProviderView | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -163,12 +226,11 @@ export function ProvidersPage() {
   const selected = providers.find((p) => p.id === selectedId) ?? null;
 
   const openAdd = () => {
-    setDrawerMode('add');
+    setSelectedId(null);
     setDrawerOpen(true);
   };
 
   const openEdit = (provider: ProviderView) => {
-    setDrawerMode('edit');
     setSelectedId(provider.id);
     setDrawerOpen(true);
   };
@@ -233,11 +295,13 @@ export function ProvidersPage() {
         <Stack gap="sm">
           {filtered.map((provider) => (
             <ProviderRow
-              key={provider.id}
+              // 默认模型变化时重挂载，重置行内的输入缓冲
+              key={`${provider.id}-${provider.defaultModel ?? ''}`}
               provider={provider}
               selected={provider.id === selectedId}
               onSelect={() => openEdit(provider)}
               onDelete={() => setDeleteTarget(provider)}
+              onUpdate={update}
             />
           ))}
           {filtered.length === 0 && (
@@ -252,23 +316,14 @@ export function ProvidersPage() {
         </Stack>
       </Paper>
 
-      {/* 新建抽屉：key 保证每次打开都是干净表单 */}
-      {drawerMode === 'add' && (
-        <ProviderCreateDrawer
-          key={`add-${drawerOpen}`}
-          opened={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          onCreate={create}
-        />
-      )}
-
-      {/* 编辑抽屉：key 保证每次打开 / 切换供应商都重挂载（表单从服务端数据初始化） */}
-      {drawerMode === 'edit' && selected && (
+      {/* 新建 / 编辑共用一个抽屉；key 保证每次打开 / 切换对象都重挂载 */}
+      {drawerOpen && (
         <ProviderDetailDrawer
-          key={`edit-${selected.id}-${drawerOpen}`}
+          key={`${selectedId ?? 'new'}-${String(drawerOpen)}`}
           provider={selected}
           opened={drawerOpen}
           onClose={() => setDrawerOpen(false)}
+          onCreate={create}
           onUpdate={update}
           onTest={test}
         />

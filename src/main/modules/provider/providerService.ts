@@ -2,23 +2,17 @@
  * Provider 配置的读写入口，IPC（providerIpc）和 main 内部（providerRegistry）都从这里取数。
  *
  * - Provider 完全由用户创建（无内置预置），配置落在 SQLite（providers 表）
+ * - 统一走 OpenAI 兼容协议，厂商差异通过 baseUrl 表达
  * - apiKey 用 safeStorage 加密后入库；renderer 拿到的 ProviderView 只带 hasApiKey，
  *   密文和明文永远不出 main 进程
- * - 表列默认值（温度 / Token 上限等）只由 providerTable 定义，这里创建时不再重复声明
  */
 import { randomUUID } from 'node:crypto';
 
 import type {
   ProviderCreate,
   ProviderId,
-  ProviderProtocol,
-  ProviderRegion,
   ProviderUpdate,
   ProviderView,
-} from '@shared/api/provider';
-import {
-  providerProtocolSchema,
-  providerRegionSchema,
 } from '@shared/api/provider';
 import {
   decryptSecret,
@@ -63,17 +57,6 @@ function resolveDefaultModel(
     : (models[0] ?? null);
 }
 
-/** DB 的 text 列可能被写入任意值，读出来时按枚举收敛到合法值 */
-function coerceType(value: string): ProviderProtocol {
-  const result = providerProtocolSchema.safeParse(value);
-  return result.success ? result.data : 'openai-compatible';
-}
-
-function coerceRegion(value: string): ProviderRegion {
-  const result = providerRegionSchema.safeParse(value);
-  return result.success ? result.data : 'international';
-}
-
 /** 读取仍有效的行；不存在或已软删除一律视为未找到 */
 function requireActive(id: ProviderId): ProviderRecord {
   const row = providerRepo.findById(id);
@@ -92,15 +75,11 @@ function toView(row: ProviderRecord): ProviderView {
   return {
     id: row.id,
     name: row.name,
-    type: coerceType(row.type),
-    region: coerceRegion(row.region),
     enabled: row.enabled,
     baseUrl: row.baseUrl,
     hasApiKey: row.apiKey !== null,
     models,
     defaultModel: resolveDefaultModel(row.defaultModel, models),
-    temperature: row.temperature,
-    maxOutputTokens: row.maxOutputTokens,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -140,7 +119,6 @@ function resolveBaseUrl(
 export interface ProviderRuntimeConfig {
   enabled: boolean;
   name: string;
-  type: ProviderProtocol;
   baseURL?: string;
   apiKey?: string;
   /** 默认模型；未设置时为模型列表第一个，列表为空则为 undefined */
@@ -152,15 +130,19 @@ export const providerService = {
     return providerRepo.findAll().map(toView);
   },
 
-  /** 新建 provider：id 由 main 生成，其余字段走 providerTable 的列默认值 */
+  /** 新建 provider：id 由 main 生成；可选配置与 update 语义一致，可一次性提交 */
   async create(input: ProviderCreate): Promise<ProviderView> {
     const now = Date.now();
+    const models = input.models === undefined ? [] : [...new Set(input.models)];
 
     const row = providerRepo.insert({
       id: randomUUID(),
       name: input.name.trim(),
-      type: input.type,
-      region: input.region,
+      enabled: input.enabled ?? false,
+      baseUrl: resolveBaseUrl(input.baseUrl, null),
+      apiKey: await resolveApiKey(input.apiKey, null),
+      models: input.models === undefined ? null : serializeModels(models),
+      defaultModel: resolveDefaultModel(input.defaultModel ?? null, models),
       createdAt: now,
       updatedAt: now,
     });
@@ -169,7 +151,7 @@ export const providerService = {
   },
 
   /**
-   * PATCH 语义：undefined 的字段不修改；baseUrl 传 null / 空串表示恢复协议默认地址；
+   * PATCH 语义：undefined 的字段不修改；baseUrl 传 null / 空串表示恢复官方默认地址；
    * apiKey 传 '' 表示清除，传新值则加密入库；defaultModel 不在最终模型列表内时忽略。
    */
   async update(patch: ProviderUpdate): Promise<ProviderView> {
@@ -194,8 +176,6 @@ export const providerService = {
       models:
         patch.models === undefined ? row.models : serializeModels(nextModels),
       defaultModel: nextDefaultModel,
-      temperature: patch.temperature ?? row.temperature,
-      maxOutputTokens: patch.maxOutputTokens ?? row.maxOutputTokens,
       updatedAt: Date.now(),
     });
 
@@ -220,7 +200,6 @@ export const providerService = {
     return {
       enabled: row.enabled,
       name: row.name,
-      type: coerceType(row.type),
       baseURL: row.baseUrl || undefined,
       apiKey: row.apiKey ? await decryptSecret(row.apiKey) : undefined,
       modelId: resolveDefaultModel(row.defaultModel, models) ?? undefined,

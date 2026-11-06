@@ -2,14 +2,14 @@
  * 模型适配层（第二阶段的核心）。
  *
  * 职责：把 ModelRef（providerId + modelId）转换成 AI SDK 的 LanguageModel。
- * 上层的 ChatService / 未来的 AgentRuntime 只依赖 LanguageModel 接口，
- * 不关心具体厂商 —— 请求走哪套协议由 provider 行的 type 字段决定
- * （用户自建 provider 时选择），新增协议只需要在这里加一个 case。
+ * 上层的 ChatService / 未来的 AgentRuntime 只依赖 LanguageModel 接口。
+ *
+ * 所有 provider 统一走 OpenAI 兼容协议（国内厂商 DeepSeek / 智谱 / 通义 / Kimi
+ * 等均提供该端点），厂商差异由配置里的 baseURL 表达。若未来需要接入
+ * Anthropic / Gemini 原生协议，再在这里按 provider 的协议字段分支。
  */
 import type { LanguageModel } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
 import type { ModelRef } from '@shared/api/provider';
 import { providerService } from '../provider/providerService';
@@ -20,7 +20,7 @@ export class ProviderConfigError extends Error {}
 /** 构建 LanguageModel 所需的最小配置（已解密），从 provider 模块的运行配置中取子集 */
 export type LanguageModelConfig = Pick<
   ProviderRuntimeConfig,
-  'name' | 'type' | 'baseURL' | 'apiKey'
+  'name' | 'baseURL' | 'apiKey'
 >;
 
 /**
@@ -31,26 +31,15 @@ export function createLanguageModel(
   config: LanguageModelConfig,
   modelId: string,
 ): LanguageModel {
-  const { apiKey, baseURL, type } = config;
+  const { apiKey, baseURL } = config;
 
   if (!apiKey) {
     throw new ProviderConfigError(`${config.name} 未配置 API Key`);
   }
 
-  switch (type) {
-    case 'anthropic':
-      return createAnthropic({ apiKey, baseURL })(modelId);
-    case 'google':
-      return createGoogleGenerativeAI({ apiKey, baseURL })(modelId);
-    case 'openai-compatible':
-      // OpenAI 兼容协议（OpenAI / DeepSeek / 智谱 / 聚合网关等）统一走
-      // Chat Completions；默认调用方式是 Responses API，第三方网关多不支持
-      return createOpenAI({ apiKey, baseURL, name: config.name }).chat(modelId);
-    default: {
-      const exhaustive: never = type;
-      throw new ProviderConfigError(`未知的接口协议: ${String(exhaustive)}`);
-    }
-  }
+  // OpenAI 兼容协议统一走 Chat Completions；默认调用方式是 Responses API，
+  // 第三方网关多不支持，必须显式 .chat()
+  return createOpenAI({ apiKey, baseURL, name: config.name }).chat(modelId);
 }
 
 export async function getLanguageModel(ref: ModelRef): Promise<LanguageModel> {

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "410a2a66-50f0-4689-8350-69823730a414",
+  "id": "1f538750-01e4-4039-ac0b-3938887efd26",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "providers": {
@@ -11,6 +11,13 @@
           "name": "id",
           "type": "text",
           "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -43,6 +50,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "default_model": {
+          "name": "default_model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
@@ -56,13 +70,25 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "providers_models_json": {
+          "name": "providers_models_json",
+          "value": "\"providers\".\"models\" is null or json_valid(\"providers\".\"models\")"
+        }
+      }
     }
   },
   "views": {},

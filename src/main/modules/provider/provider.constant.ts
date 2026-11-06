@@ -8,8 +8,6 @@
 
 export type ProviderPresetSample = {
   name: string;
-  type: 'openai-compatible' | 'anthropic' | 'google';
-  region: 'international' | 'domestic';
   defaultBaseURL?: string;
   defaultModels: string[];
 };
@@ -18,33 +16,23 @@ export type ProviderPresetSample = {
 export const PROVIDER_PRESET_SAMPLES: Record<string, ProviderPresetSample> = {
   openai: {
     name: 'OpenAI',
-    type: 'openai-compatible',
-    region: 'international',
     defaultModels: ['gpt-5.1', 'gpt-5-mini'],
   },
   anthropic: {
     name: 'Anthropic',
-    type: 'anthropic',
-    region: 'international',
     defaultModels: ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5'],
   },
   google: {
     name: 'Google Gemini',
-    type: 'google',
-    region: 'international',
     defaultModels: ['gemini-2.5-pro', 'gemini-2.5-flash'],
   },
   deepseek: {
     name: 'DeepSeek',
-    type: 'openai-compatible',
-    region: 'domestic',
     defaultBaseURL: 'https://api.deepseek.com/v1',
     defaultModels: ['deepseek-chat', 'deepseek-reasoner'],
   },
   zhipu: {
     name: '智谱 AI',
-    type: 'openai-compatible',
-    region: 'domestic',
     defaultBaseURL: 'https://open.bigmodel.cn/api/paas/v4',
     defaultModels: ['glm-4.6', 'glm-4.5-air', 'glm-4.5-flash'],
   },

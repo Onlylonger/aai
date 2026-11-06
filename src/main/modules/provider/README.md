@@ -3,6 +3,9 @@
 用户自建模型供应商的配置管理：CRUD、API Key 加密存储、模型列表、连接测试。
 本模块同时作为其他业务模块的结构范本，新增模块时按这里的分层和边界来抄。
 
+**协议约定**：所有 provider 统一使用 OpenAI API 格式（国内厂商 DeepSeek / 智谱 /
+通义 / Kimi 等均提供该端点），厂商差异只通过 `baseUrl` 表达，不设协议字段。
+
 ## 文件分层
 
 | 文件 | 职责 | 对外可见 |
@@ -38,7 +41,7 @@ import { providerService } from '@main/modules/provider/providerService';
 const config = await providerService.getRuntimeConfig(id);
 ```
 
-- `providerService.getRuntimeConfig(id)`：解密后的运行配置（协议、baseURL、apiKey、默认模型），
+- `providerService.getRuntimeConfig(id)`：解密后的运行配置（baseURL、apiKey、默认模型），
   供 `llm/providerRegistry`、`llm/providerTest` 这类适配层消费
 - `ProviderRuntimeConfig`：上述返回值的类型
 - 模块注册入口：组合根 `main/modules/registerModules.ts` 直接引用 `providerIpc` 的
