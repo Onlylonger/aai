@@ -5,9 +5,11 @@
 > 但事件只是通知，**任务状态的可靠来源必须是数据库 / main 进程内的 RunManager**，
 > 不能把"renderer 收到了事件"当作任务存活的依据。
 >
-> **实施状态（2026-11-07）**：4.1–4.3 已落地（`handle`/`handleValidated` 暴露 event、
-> chat/conversation IPC 边界校验、按 sender 定向发送、`ChatService.send(req, emit)`）。
-> 4.4 RunManager 与 4.5 renderer run map 留到 Agent P1 一起做。
+> **实施状态（2026-11-07）**：4.1–4.5 已落地：
+> `handle`/`handleValidated` 暴露 event、chat/conversation IPC 边界校验、
+> 按 sender 定向发送、`RuntimeManager`（`src/main/modules/runtime/runtimeManager.ts`）、
+> `ChatService` 无状态化、renderer `chatStore.runs` 按 runId 建模。
+> 后续在 P0/P1 中把 run/step 状态落库，并在 `RuntimeManager` 上补 attach / 重新订阅。
 
 ---
 
@@ -241,8 +243,9 @@ class RuntimeManager {
 }
 ```
 
-第一版可以内联在 `chatIpc` 里，但建议独立成 `infrastructure/runtimeManager.ts` 或
-`modules/runtime/`，因为 AgentRuntime 马上也要用。
+已实现于 `src/main/modules/runtime/runtimeManager.ts`：`start(kind, sender, execute)`
+创建 runId / AbortController，并把事件定向发给对应窗口；`abort` / `abortAll` 由它统一管理。
+Chat / Agent 共用同一个 `runtimeManager` 实例。
 
 ### 4.5 renderer 状态：从单 run 到 run map
 
@@ -265,26 +268,30 @@ runs: Record<string, RunState>;          // 按 runId 存
 activeRunByConversation: Record<string, string>; // 当前会话的活跃 run
 ```
 
-即使第一版限制"同一会话同时一个 run"，按 runId 建模也让 Agent 多步骤事件、
-未来并行任务、重新订阅都更自然。
+已实现于 `chatStore`：`runs: Record<runId, RunState>` 记录所有已知 run；
+`activeRunId` 只作为当前会话的快捷引用。即使第一版限制"同一会话同时一个 run"，
+按 runId 建模也让 Agent 多步骤事件、未来并行任务、重新订阅都更自然。
 
 ### 4.6 Service 形态：普通对象 vs class
 
-结论：**按「是否有跨调用状态」选择，不强制形态统一。**
+结论：**按「是否有跨调用状态」选择形态；状态抽离完成后，无状态服务自然统一为普通对象。**
 
-| | providerService | ChatService |
-| --- | --- | --- |
-| 跨调用状态 | 无（每次只读写 DB） | 有（`Map<runId, AbortController>`） |
-| 合适形态 | 普通对象（模块单例） | class（或闭包工厂） |
-| 理由 | 导入简单、无 `this` 坑、易 mock | 需要持有运行中的 controller / 状态 |
+当前最终形态：
 
-补充：
+| | providerService | chatService | RuntimeManager |
+| --- | --- | --- | --- |
+| 跨调用状态 | 无 | 无（run 状态已抽走） | 有（`Map<runId, ActiveRun>`） |
+| 形态 | 普通对象 | 普通对象 | class（单例 `runtimeManager`） |
+| 理由 | 只读写 DB | 只执行一次 Chat | 持有 controller / 状态 / 归属窗口 |
 
-- 不需要为了"看起来一致"把 providerService 改成 class，也不建议把 ChatService 改成无状态对象。
-- 更进一步的演进方向是：把 run 状态抽到 `RuntimeManager`，ChatService 变成无状态执行器，
-  那时两者形态自然一致；**当前阶段保持现状即可**。
-- 如果偏好统一风格，可选工厂函数（`createChatService()` 返回对象、闭包持有 Map），
-  但这是风格选择，不是正确性问题。
+演进过程：
+
+1. 最初 ChatService 持有 `Map<runId, AbortController>`，因此是 class；
+2. 把 run 状态抽到 `RuntimeManager` 后，ChatService 变成无状态执行器；
+3. 无状态后改为普通对象导出，与 providerService 保持一致。
+
+规则：**有状态 / 有生命周期资源的组件用 class（或闭包工厂）；无状态的领域服务用普通对象。**
+不需要为了视觉统一强行改造，而是先把状态放到正确的位置。
 
 ---
 

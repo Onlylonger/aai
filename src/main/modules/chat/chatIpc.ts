@@ -1,31 +1,29 @@
 /**
  * Chat 模块的 IPC 注册。
  *
- * 事件定向发送：只发给发起本次 send 的 WebContents，不再全局广播。
- * 事件只是通知，任务状态的可靠来源在 main 侧（后续落库后以 DB 为准）。
+ * - 入参走 shared 的 zod schema 校验
+ * - run 生命周期交给 RuntimeManager：创建 runId / AbortController，
+ *   并把事件定向发给发起本次 send 的 WebContents
  */
 import { app } from 'electron';
 
 import { CHAT_CHANNELS, chatAbortSchema, chatSendSchema } from '@shared/chat';
-import { handleValidated, sendTo } from '@main/infrastructure/ipc';
+import { handleValidated } from '@main/infrastructure/ipc';
 
-import { ChatService } from './chatService';
+import { runtimeManager } from '../runtime/runtimeManager';
+import { chatService } from './chatService';
 
 export function registerChatIpc() {
-  const chatService = new ChatService();
-
-  handleValidated(CHAT_CHANNELS.send, chatSendSchema, (req, event) => {
-    const sender = event.sender;
-
-    return chatService.send(req, (payload) =>
-      sendTo(sender, CHAT_CHANNELS.runEvent, payload),
-    );
-  });
+  handleValidated(CHAT_CHANNELS.send, chatSendSchema, (req, event) =>
+    runtimeManager.start('chat', event.sender, ({ runId, signal, emit }) =>
+      chatService.send(req, { runId, signal, emit }),
+    ),
+  );
 
   handleValidated(CHAT_CHANNELS.abort, chatAbortSchema, ({ runId }) =>
-    chatService.abort(runId),
+    runtimeManager.abort(runId),
   );
 
   // 退出前取消所有正在进行的请求
-  app.on('before-quit', () => chatService.abortAll());
+  app.on('before-quit', () => runtimeManager.abortAll());
 }

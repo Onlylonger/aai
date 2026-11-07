@@ -3,8 +3,10 @@
  *
  * renderer 侧的「单一数据源」：
  * - 用户操作（send / abort）→ 调用 window.api.invoke
- * - main 推送的 RunEvent → applyRunEvent 增量更新消息
+ * - main 推送的 RunEvent → applyRunEvent 增量更新消息与 run 状态
  *
+ * 运行状态按 runId 管理（runs），activeRunId 只是「当前会话正在运行的 run」
+ * 的快捷引用，方便停止按钮使用。
  * 组件只读 store，不直接碰 IPC。
  */
 import { create } from 'zustand';
@@ -17,10 +19,21 @@ import {
 } from '@shared/chat';
 import type { ModelRef } from '@shared/api/provider';
 
+interface RunState {
+  runId: string;
+  conversationId: string;
+  /** 本次 run 产出的 assistant 消息 id */
+  messageId: string;
+  status: 'running' | 'done' | 'error' | 'aborted';
+  error?: string;
+}
+
 interface ChatState {
   conversationId?: string;
   messages: ChatMessage[];
-  /** 当前正在执行的 run，用于停止按钮 */
+  /** 所有已知 run 的状态，按 runId 索引 */
+  runs: Record<string, RunState>;
+  /** 当前会话正在执行的 run，用于停止按钮 */
   activeRunId?: string;
   model?: ModelRef;
   sendError?: string;
@@ -56,8 +69,16 @@ function patchMessage(
   return messages.map((m) => (m.id === id ? { ...m, ...update(m) } : m));
 }
 
+function upsertRun(
+  runs: Record<string, RunState>,
+  run: RunState,
+): Record<string, RunState> {
+  return { ...runs, [run.runId]: { ...runs[run.runId], ...run } };
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
+  runs: {},
   model: loadLastModel(),
 
   setModel(model) {
@@ -78,7 +99,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const messages = await window.api.invoke(CONVERSATION_CHANNELS.messages, {
       conversationId,
     });
-    set({ conversationId, messages, sendError: undefined });
+
+    // 该会话可能仍有 Run 在后台执行：恢复停止按钮的状态
+    const activeRun = Object.values(get().runs).find(
+      (run) =>
+        run.conversationId === conversationId && run.status === 'running',
+    );
+
+    set({
+      conversationId,
+      messages,
+      activeRunId: activeRun?.runId,
+      sendError: undefined,
+    });
   },
 
   async send(text) {
@@ -101,6 +134,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         conversationId: res.conversationId,
         activeRunId: res.runId,
         messages: [...s.messages, res.userMessage, res.assistantMessage],
+        runs: s.runs[res.runId]
+          ? s.runs
+          : upsertRun(s.runs, {
+              runId: res.runId,
+              conversationId: res.conversationId,
+              messageId: res.assistantMessage.id,
+              status: 'running',
+            }),
       }));
     } catch (error) {
       set({
@@ -127,13 +168,53 @@ export const useChatStore = create<ChatState>((set, get) => ({
       pendingEvents.push(event);
       return;
     }
-    if (event.conversationId !== get().conversationId) return;
 
+    const { runId, conversationId, messageId } = event;
+    const isCurrent = conversationId === get().conversationId;
+
+    // 1) 更新 run 状态表（即使事件属于其他会话也记录）
+    if (event.type === 'run-start') {
+      set((s) => ({
+        runs: upsertRun(s.runs, {
+          runId,
+          conversationId,
+          messageId,
+          status: 'running',
+        }),
+        activeRunId: isCurrent ? runId : s.activeRunId,
+      }));
+      return;
+    }
+
+    if (
+      event.type === 'run-finish' ||
+      event.type === 'run-error' ||
+      event.type === 'run-abort'
+    ) {
+      const status =
+        event.type === 'run-finish'
+          ? 'done'
+          : event.type === 'run-error'
+            ? 'error'
+            : 'aborted';
+
+      set((s) => ({
+        runs: upsertRun(s.runs, {
+          runId,
+          conversationId,
+          messageId,
+          status,
+          error: event.type === 'run-error' ? event.error : undefined,
+        }),
+        activeRunId: s.activeRunId === runId ? undefined : s.activeRunId,
+      }));
+    }
+
+    if (!isCurrent) return;
+
+    // 2) 更新当前会话的消息
     set((s) => {
-      const { messageId } = event;
       switch (event.type) {
-        case 'run-start':
-          return { activeRunId: event.runId };
         case 'text-delta':
           return {
             messages: patchMessage(s.messages, messageId, (m) => ({
@@ -148,14 +229,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
           };
         case 'run-finish':
           return {
-            activeRunId: undefined,
             messages: patchMessage(s.messages, messageId, () => ({
               status: 'done',
             })),
           };
         case 'run-error':
           return {
-            activeRunId: undefined,
             messages: patchMessage(s.messages, messageId, () => ({
               status: 'error',
               error: event.error,
@@ -163,7 +242,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           };
         case 'run-abort':
           return {
-            activeRunId: undefined,
             messages: patchMessage(s.messages, messageId, () => ({
               status: 'aborted',
             })),
