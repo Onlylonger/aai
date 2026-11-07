@@ -1,11 +1,6 @@
-
 export type AttachmentType = 'file' | 'image';
 
-export type AttachmentStatus =
-  | 'selected'
-  | 'uploading'
-  | 'success'
-  | 'error';
+export type AttachmentStatus = 'selected' | 'uploading' | 'success' | 'error';
 
 export interface ChatAttachment {
   id: string;

@@ -58,19 +58,19 @@ export function ChatToolbar({
           </ActionIcon>
         </Tooltip>
       ) : (
-      <Tooltip label="发送消息">
-        <ActionIcon
-          variant="filled"
-          color="blue"
-          size="lg"
-          radius="md"
-          disabled={disabled || !canSend}
-          onClick={onSend}
-          aria-label="发送消息"
-        >
-          <PaperPlaneTiltIcon size={18} weight="bold" />
-        </ActionIcon>
-      </Tooltip>
+        <Tooltip label="发送消息">
+          <ActionIcon
+            variant="filled"
+            color="blue"
+            size="lg"
+            radius="md"
+            disabled={disabled || !canSend}
+            onClick={onSend}
+            aria-label="发送消息"
+          >
+            <PaperPlaneTiltIcon size={18} weight="bold" />
+          </ActionIcon>
+        </Tooltip>
       )}
     </Group>
   );

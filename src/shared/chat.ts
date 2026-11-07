@@ -12,6 +12,7 @@ import { z } from 'zod';
 
 import { modelRefSchema } from './api/provider';
 import type { ModelRef } from './api/provider';
+import type { AgentStepStatus, AgentStepView } from './api/agent';
 
 export type ConversationMode = 'chat' | 'agent';
 
@@ -54,6 +55,8 @@ export const chatSendSchema = z.object({
   conversationId: z.string().min(1).optional(),
   text: z.string().trim().min(1, '消息不能为空').max(100_000, '消息过长'),
   model: modelRefSchema,
+  /** 本次消息使用的模式；默认 chat */
+  mode: z.enum(['chat', 'agent']).default('chat'),
 });
 
 export type SendMessageRequest = z.infer<typeof chatSendSchema>;
@@ -112,6 +115,16 @@ export type RunEvent = RunEventBase &
     | { type: 'run-finish'; finishReason: RunFinishReason; usage?: RunUsage }
     | { type: 'run-error'; error: string }
     | { type: 'run-abort' }
+    // ---- Agent 执行过程（P1）----
+    | { type: 'agent-plan'; plan: string }
+    | { type: 'step-start'; step: AgentStepView }
+    | {
+        type: 'step-finish';
+        stepId: string;
+        status: AgentStepStatus;
+        output?: unknown;
+        error?: string;
+      }
   );
 
 export type RunEventType = RunEvent['type'];

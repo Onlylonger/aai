@@ -4,14 +4,13 @@
  * 流程：
  *   1. 写入 user 消息 + 一条空的 assistant 消息（status = streaming）
  *   2. 立即返回 runId 给 renderer（不等模型回复）
- *   3. 后台调用 streamText，把 AI SDK 的 fullStream 转成我们自己的 RunEvent 推给 renderer
+ *   3. 后台调用模型，把增量转成 RunEvent 推给 renderer
  *   4. 结束 / 出错 / 取消时更新 assistant 消息状态
  *
  * runId / AbortController / 事件投递由 RuntimeManager 负责；
- * 本模块只做「执行一次 Chat」，不持有跨调用状态，因此以普通对象导出，
- * 与 providerService 的形态保持一致。
+ * 本模块只做「执行一次 Chat」，不持有跨调用状态，因此以普通对象导出。
  */
-import { streamText, type ModelMessage } from 'ai';
+import type { ModelMessage } from 'ai';
 import log from 'electron-log';
 
 import type {
@@ -21,7 +20,9 @@ import type {
   SendMessageResponse,
 } from '@shared/chat';
 import { conversationService } from '../conversation/conversationService';
-import { getLanguageModel } from '../provider/providerRegistry';
+
+import { toModelMessages } from './messageHistory';
+import { streamAssistant } from './streamAssistant';
 
 /** 事件发射器：由调用方注入，ChatService 不直接依赖 BrowserWindow */
 export type RunEventEmitter = (event: RunEvent) => void;
@@ -33,29 +34,13 @@ export interface ChatRunContext {
   emit: RunEventEmitter;
 }
 
-type RunEventPayload = RunEvent extends infer E
+export type RunEventPayload = RunEvent extends infer E
   ? E extends RunEvent
     ? Omit<E, 'runId' | 'conversationId' | 'messageId' | 'ts'>
     : never
   : never;
 
 const SYSTEM_PROMPT = 'You are a helpful assistant.';
-
-function toModelMessages(messages: ChatMessage[]): ModelMessage[] {
-  return messages
-    .filter((m) => m.text && (m.role === 'user' || m.status === 'done'))
-    .map((m) => ({ role: m.role, content: m.text }));
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
-}
 
 async function execute(opts: {
   req: SendMessageRequest;
@@ -65,93 +50,50 @@ async function execute(opts: {
   emit: (payload: RunEventPayload) => void;
 }) {
   const { req, messages, assistantMessage, signal, emit } = opts;
-  let text = '';
-  let reasoning = '';
 
   emit({ type: 'run-start', mode: 'chat', model: req.model });
 
-  const fail = (error: unknown) => {
-    const message = errorMessage(error);
-    log.error('[chat] run failed', message);
+  const outcome = await streamAssistant({
+    model: req.model,
+    instructions: SYSTEM_PROMPT,
+    messages,
+    signal,
+    onTextDelta: (delta) => emit({ type: 'text-delta', delta }),
+    onReasoningDelta: (delta) => emit({ type: 'reasoning-delta', delta }),
+  });
+
+  if (outcome.type === 'finish') {
     conversationService.updateMessage(assistantMessage.id, {
-      text,
-      reasoning: reasoning || undefined,
-      status: 'error',
-      error: message,
-    });
-    emit({ type: 'run-error', error: message });
-  };
-
-  try {
-    const model = await getLanguageModel(req.model);
-    const result = streamText({
-      model,
-      instructions: SYSTEM_PROMPT,
-      messages,
-      abortSignal: signal,
-    });
-
-    for await (const part of result.fullStream) {
-      switch (part.type) {
-        case 'text-delta':
-          text += part.text;
-          emit({ type: 'text-delta', delta: part.text });
-          break;
-        case 'reasoning-delta':
-          reasoning += part.text;
-          emit({ type: 'reasoning-delta', delta: part.text });
-          break;
-        case 'error':
-          // 流内错误（如 401、限流），AI SDK 不会 throw，而是作为 part 返回
-          fail(part.error);
-          return;
-        case 'abort':
-          conversationService.updateMessage(assistantMessage.id, {
-            text,
-            reasoning: reasoning || undefined,
-            status: 'aborted',
-          });
-          emit({ type: 'run-abort' });
-          return;
-        case 'finish':
-          conversationService.updateMessage(assistantMessage.id, {
-            text,
-            reasoning: reasoning || undefined,
-            status: 'done',
-          });
-          emit({
-            type: 'run-finish',
-            finishReason: part.finishReason,
-            usage: {
-              inputTokens: part.totalUsage.inputTokens,
-              outputTokens: part.totalUsage.outputTokens,
-              totalTokens: part.totalUsage.totalTokens,
-            },
-          });
-          return;
-        default:
-          // 其他 part（step-start、tool-call 等）在 Agent 阶段再处理
-          break;
-      }
-    }
-
-    // 兜底：流结束了但没有收到 finish / abort / error
-    conversationService.updateMessage(assistantMessage.id, {
-      text,
+      text: outcome.text,
+      reasoning: outcome.reasoning || undefined,
       status: 'done',
     });
-    emit({ type: 'run-finish', finishReason: 'other' });
-  } catch (error) {
-    if (signal.aborted) {
-      conversationService.updateMessage(assistantMessage.id, {
-        text,
-        status: 'aborted',
-      });
-      emit({ type: 'run-abort' });
-      return;
-    }
-    fail(error);
+    emit({
+      type: 'run-finish',
+      finishReason: outcome.finishReason,
+      usage: outcome.usage,
+    });
+    return;
   }
+
+  if (outcome.type === 'error') {
+    log.error('[chat] run failed', outcome.error);
+    conversationService.updateMessage(assistantMessage.id, {
+      text: outcome.text,
+      reasoning: outcome.reasoning || undefined,
+      status: 'error',
+      error: outcome.error,
+    });
+    emit({ type: 'run-error', error: outcome.error });
+    return;
+  }
+
+  conversationService.updateMessage(assistantMessage.id, {
+    text: outcome.text,
+    reasoning: outcome.reasoning || undefined,
+    status: 'aborted',
+  });
+  emit({ type: 'run-abort' });
 }
 
 export const chatService = {

@@ -4,6 +4,7 @@
  *
  * 约定：不做 barrel 再导出，各模块的 IPC 注册入口按文件名直接引用。
  */
+import { registerAgentIpc } from './agent/agentIpc';
 import { registerChatIpc } from './chat/chatIpc';
 import { registerConversationIpc } from './conversation/conversationIpc';
 import { registerProviderIpc } from './provider/providerIpc';
@@ -12,4 +13,5 @@ export function registerModules() {
   registerProviderIpc();
   registerConversationIpc();
   registerChatIpc();
+  registerAgentIpc();
 }

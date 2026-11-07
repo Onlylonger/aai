@@ -5,27 +5,36 @@
  * - 用户操作（send / abort）→ 调用 window.api.invoke
  * - main 推送的 RunEvent → applyRunEvent 增量更新消息与 run 状态
  *
- * 运行状态按 runId 管理（runs），activeRunId 只是「当前会话正在运行的 run」
- * 的快捷引用，方便停止按钮使用。
- * 组件只读 store，不直接碰 IPC。
+ * 运行状态按 runId 管理（runs）；activeRunId 只是「当前会话正在运行的 run」
+ * 的快捷引用。Agent 的执行步骤（steps）也挂在 run 上，以折叠卡片展示。
  */
 import { create } from 'zustand';
 
 import {
+  AGENT_CHANNELS,
+  type AgentRunStatus,
+  type AgentRunView,
+  type AgentStepView,
+} from '@shared/api/agent';
+import {
   CHAT_CHANNELS,
   CONVERSATION_CHANNELS,
   type ChatMessage,
+  type ConversationMode,
   type RunEvent,
 } from '@shared/chat';
 import type { ModelRef } from '@shared/api/provider';
 
-interface RunState {
+export interface RunState {
   runId: string;
   conversationId: string;
   /** 本次 run 产出的 assistant 消息 id */
   messageId: string;
+  mode: ConversationMode;
   status: 'running' | 'done' | 'error' | 'aborted';
+  plan?: string;
   error?: string;
+  steps: AgentStepView[];
 }
 
 interface ChatState {
@@ -36,9 +45,11 @@ interface ChatState {
   /** 当前会话正在执行的 run，用于停止按钮 */
   activeRunId?: string;
   model?: ModelRef;
+  mode: ConversationMode;
   sendError?: string;
 
   setModel: (model: ModelRef) => void;
+  setMode: (mode: ConversationMode) => void;
   newConversation: () => void;
   loadConversation: (conversationId: string) => Promise<void>;
   /** 应用启动时恢复上次打开的会话 */
@@ -49,6 +60,7 @@ interface ChatState {
 }
 
 const MODEL_KEY = 'chat:lastModel';
+const MODE_KEY = 'chat:lastMode';
 const CONVERSATION_KEY = 'chat:lastConversation';
 
 /** chat:send 进行中标记，以及期间到达的事件缓冲 */
@@ -64,6 +76,10 @@ function loadLastModel(): ModelRef | undefined {
   }
 }
 
+function loadLastMode(): ConversationMode {
+  return localStorage.getItem(MODE_KEY) === 'agent' ? 'agent' : 'chat';
+}
+
 function patchMessage(
   messages: ChatMessage[],
   id: string,
@@ -72,21 +88,69 @@ function patchMessage(
   return messages.map((m) => (m.id === id ? { ...m, ...update(m) } : m));
 }
 
+function toRunStatus(status: AgentRunStatus): RunState['status'] {
+  switch (status) {
+    case 'completed':
+      return 'done';
+    case 'failed':
+      return 'error';
+    case 'cancelled':
+      return 'aborted';
+    default:
+      return 'running';
+  }
+}
+
+function fromAgentRun(run: AgentRunView): RunState {
+  return {
+    runId: run.id,
+    conversationId: run.conversationId,
+    messageId: run.messageId,
+    mode: 'agent',
+    status: toRunStatus(run.status),
+    plan: run.plan,
+    error: run.error,
+    steps: run.steps,
+  };
+}
+
+/** 合并式更新：未提供的字段保留已有值 */
 function upsertRun(
   runs: Record<string, RunState>,
-  run: RunState,
+  patch: Pick<RunState, 'runId' | 'conversationId' | 'messageId'> &
+    Partial<RunState>,
 ): Record<string, RunState> {
-  return { ...runs, [run.runId]: { ...runs[run.runId], ...run } };
+  const base = runs[patch.runId];
+
+  return {
+    ...runs,
+    [patch.runId]: {
+      runId: patch.runId,
+      conversationId: patch.conversationId,
+      messageId: patch.messageId,
+      mode: patch.mode ?? base?.mode ?? 'chat',
+      status: patch.status ?? base?.status ?? 'running',
+      plan: patch.plan ?? base?.plan,
+      error: patch.error ?? base?.error,
+      steps: patch.steps ?? base?.steps ?? [],
+    },
+  };
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   runs: {},
   model: loadLastModel(),
+  mode: loadLastMode(),
 
   setModel(model) {
     localStorage.setItem(MODEL_KEY, JSON.stringify(model));
     set({ model });
+  },
+
+  setMode(mode) {
+    localStorage.setItem(MODE_KEY, mode);
+    set({ mode });
   },
 
   newConversation() {
@@ -100,23 +164,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   async loadConversation(conversationId) {
-    const messages = await window.api.invoke(CONVERSATION_CHANNELS.messages, {
-      conversationId,
-    });
+    const [messages, agentRuns] = await Promise.all([
+      window.api.invoke(CONVERSATION_CHANNELS.messages, { conversationId }),
+      window.api.invoke(AGENT_CHANNELS.runs, { conversationId }),
+    ]);
     localStorage.setItem(CONVERSATION_KEY, conversationId);
 
-    // 该会话可能仍有 Run 在后台执行：恢复停止按钮的状态
-    const activeRun = Object.values(get().runs).find(
-      (run) =>
-        run.conversationId === conversationId && run.status === 'running',
+    const loadedRuns: Record<string, RunState> = {};
+    for (const run of agentRuns) {
+      loadedRuns[run.id] = fromAgentRun(run);
+    }
+
+    const activeRun = Object.values(loadedRuns).find(
+      (run) => run.status === 'running',
     );
 
-    set({
+    set((s) => ({
       conversationId,
       messages,
+      runs: { ...s.runs, ...loadedRuns },
       activeRunId: activeRun?.runId,
       sendError: undefined,
-    });
+    }));
   },
 
   async restoreLastConversation() {
@@ -132,7 +201,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   async send(text) {
-    const { model, conversationId, activeRunId } = get();
+    const { model, conversationId, activeRunId, mode } = get();
     if (activeRunId || sending) return;
     if (!model) {
       set({ sendError: '请先选择模型' });
@@ -146,6 +215,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         conversationId,
         text,
         model,
+        mode,
       });
       localStorage.setItem(CONVERSATION_KEY, res.conversationId);
       set((s) => ({
@@ -158,7 +228,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               runId: res.runId,
               conversationId: res.conversationId,
               messageId: res.assistantMessage.id,
+              mode: res.assistantMessage.mode ?? mode,
               status: 'running',
+              steps: [],
             }),
       }));
     } catch (error) {
@@ -188,49 +260,102 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     const { runId, conversationId, messageId } = event;
-    const isCurrent = conversationId === get().conversationId;
+    const state = get();
+    const isCurrent = conversationId === state.conversationId;
+    const run = state.runs[runId];
 
-    // 1) 更新 run 状态表（即使事件属于其他会话也记录）
-    if (event.type === 'run-start') {
-      set((s) => ({
-        runs: upsertRun(s.runs, {
-          runId,
-          conversationId,
-          messageId,
-          status: 'running',
-        }),
-        activeRunId: isCurrent ? runId : s.activeRunId,
-      }));
-      return;
-    }
+    switch (event.type) {
+      case 'run-start':
+        set({
+          runs: upsertRun(state.runs, {
+            runId,
+            conversationId,
+            messageId,
+            mode: event.mode,
+            status: 'running',
+            steps: [],
+          }),
+          activeRunId: isCurrent ? runId : state.activeRunId,
+        });
+        return;
 
-    if (
-      event.type === 'run-finish' ||
-      event.type === 'run-error' ||
-      event.type === 'run-abort'
-    ) {
-      const status =
-        event.type === 'run-finish'
-          ? 'done'
-          : event.type === 'run-error'
-            ? 'error'
-            : 'aborted';
+      case 'agent-plan':
+        set({
+          runs: upsertRun(state.runs, {
+            runId,
+            conversationId,
+            messageId,
+            plan: event.plan,
+          }),
+        });
+        return;
 
-      set((s) => ({
-        runs: upsertRun(s.runs, {
-          runId,
-          conversationId,
-          messageId,
-          status,
-          error: event.type === 'run-error' ? event.error : undefined,
-        }),
-        activeRunId: s.activeRunId === runId ? undefined : s.activeRunId,
-      }));
+      case 'step-start':
+        set({
+          runs: upsertRun(state.runs, {
+            runId,
+            conversationId,
+            messageId,
+            steps: [
+              ...(run?.steps ?? []).filter((s) => s.id !== event.step.id),
+              event.step,
+            ],
+          }),
+        });
+        return;
+
+      case 'step-finish':
+        set({
+          runs: upsertRun(state.runs, {
+            runId,
+            conversationId,
+            messageId,
+            steps: (run?.steps ?? []).map((step) =>
+              step.id === event.stepId
+                ? {
+                    ...step,
+                    status: event.status,
+                    output: event.output ?? step.output,
+                    error: event.error ?? step.error,
+                    completedAt: Date.now(),
+                  }
+                : step,
+            ),
+          }),
+        });
+        return;
+
+      case 'run-finish':
+      case 'run-error':
+      case 'run-abort': {
+        const status =
+          event.type === 'run-finish'
+            ? 'done'
+            : event.type === 'run-error'
+              ? 'error'
+              : 'aborted';
+
+        set({
+          runs: upsertRun(state.runs, {
+            runId,
+            conversationId,
+            messageId,
+            status,
+            error: event.type === 'run-error' ? event.error : undefined,
+          }),
+          activeRunId:
+            state.activeRunId === runId ? undefined : state.activeRunId,
+        });
+        break;
+      }
+
+      default:
+        break;
     }
 
     if (!isCurrent) return;
 
-    // 2) 更新当前会话的消息
+    // 更新当前会话的消息
     set((s) => {
       switch (event.type) {
         case 'text-delta':

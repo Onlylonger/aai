@@ -8,3 +8,5 @@
 export * from '../../modules/provider/providerTable';
 export * from '../../modules/conversation/conversationTable';
 export * from '../../modules/conversation/messageTable';
+export * from '../../modules/agent/agentRunTable';
+export * from '../../modules/agent/agentStepTable';

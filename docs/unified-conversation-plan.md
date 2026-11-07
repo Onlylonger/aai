@@ -2,9 +2,12 @@
 
 > 目标：一个会话容器，支持 Chat / Agent 两种工作模式；消息与 Agent 执行记录在内部分开存储，UI 上保持连续体验。
 >
-> **实施状态（2026-11-07）**：P0 已落地——conversations / messages 表与 repo/service、
-> ChatService 改走 conversationService、`conversation:messages` 读库、启动恢复上次会话。
-> P1（Agent 骨架）待开始。
+> **实施状态（2026-11-07）**：P0 / P1 已落地。
+> P0：conversations / messages 表与 repo/service、ChatService 改走 conversationService、
+> `conversation:messages` 读库、启动恢复上次会话。
+> P1：agent_runs / agent_steps 表与 repo/service、AgentRuntime（P1 为固定计划 + 单次模型调用）、
+> `chat:send` 支持 mode='agent'、step 事件、渲染层 AgentRunCard 与 Chat/Agent 切换。
+> P2（只读工具与审批）待开始。
 
 ## 0. 现状盘点
 
@@ -327,13 +330,15 @@ Runtime 循环：`plan → tool → observe → llm → ... → final`，上限�
 
 验收：新建会话 → 发消息 → 重启应用 → 历史消息完整恢复。
 
-### P1：Agent 骨架（无真实工具）
+### P1：Agent 骨架（无真实工具）✅
 
-- [ ] agent_runs / agent_steps 表 + repo/service
-- [ ] `chat:send` 支持 `mode='agent'`
-- [ ] AgentRuntime 第一步只做「LLM 单步 + 记录 plan/step 记录」
-- [ ] RunEvent 增加 step 事件
-- [ ] 渲染层 AgentRunCard（折叠卡片 + 状态）
+- [x] agent_runs / agent_steps 表 + repo/service
+- [x] `chat:send` 支持 `mode='agent'`
+- [x] AgentRuntime 第一步只做「LLM 单步 + 记录 plan/step 记录」（P1 使用固定计划）
+- [x] RunEvent 增加 step 事件
+- [x] 渲染层 AgentRunCard（折叠卡片 + 状态）
+- [x] 输入区 Chat / Agent 模式切换
+- [x] 打开历史会话时加载 runs / steps
 
 验收：同一会话内先 Chat 后 Agent 再 Chat，消息连续；Agent 卡片显示执行记录；取消可用。
 

@@ -26,11 +26,13 @@ import type {
   ConversationIpcContract,
 } from '@shared/chat';
 import type { ProviderIpcContract } from '@shared/api/provider';
+import type { AgentIpcContract } from '@shared/api/agent';
 
 /** renderer → main 的调用，key 是 channel 名，值是 [参数, 返回值] */
 export type IpcInvokeMap = ChatIpcContract &
   ConversationIpcContract &
-  ProviderIpcContract;
+  ProviderIpcContract &
+  AgentIpcContract;
 
 /** main → renderer 的推送 */
 export type IpcEventMap = ChatIpcEvents;

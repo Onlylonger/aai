@@ -1,23 +1,36 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import {
   Alert,
   Box,
   Center,
+  Group,
   Paper,
   ScrollArea,
+  SegmentedControl,
   Stack,
   Text,
 } from '@mantine/core';
 
+import { AgentRunCard } from '../components/AgentRunCard';
 import { ChatComposer } from '../components/composer/ChatComposer';
 import { ModelSelect } from '../components/ModelSelect';
-import { subscribeRunEvents, useChatStore } from '../store/chatStore';
+import {
+  subscribeRunEvents,
+  useChatStore,
+  type RunState,
+} from '../store/chatStore';
 
 import type { ChatMessagePayload } from '../components/composer/types/message';
-import type { ChatMessage } from '@shared/chat';
+import type { ChatMessage, ConversationMode } from '@shared/chat';
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({
+  message,
+  run,
+}: {
+  message: ChatMessage;
+  run?: RunState;
+}) {
   const isUser = message.role === 'user';
   const waiting =
     message.status === 'streaming' && !message.text && !message.reasoning;
@@ -26,9 +39,15 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     <Box
       style={{
         display: 'flex',
-        justifyContent: isUser ? 'flex-end' : 'flex-start',
+        flexDirection: 'column',
+        alignItems: isUser ? 'flex-end' : 'flex-start',
+        gap: 6,
+        width: '100%',
       }}
     >
+      {/* Agent 执行过程在最终回答之前展示 */}
+      {run && <AgentRunCard run={run} />}
+
       <Paper
         p="sm"
         radius="lg"
@@ -70,14 +89,29 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 export function ChatPage() {
   const messages = useChatStore((s) => s.messages);
   const model = useChatStore((s) => s.model);
+  const mode = useChatStore((s) => s.mode);
+  const runs = useChatStore((s) => s.runs);
   const running = useChatStore((s) => Boolean(s.activeRunId));
   const sendError = useChatStore((s) => s.sendError);
   const setModel = useChatStore((s) => s.setModel);
+  const setMode = useChatStore((s) => s.setMode);
   const send = useChatStore((s) => s.send);
   const abort = useChatStore((s) => s.abort);
   const restoreLastConversation = useChatStore(
     (s) => s.restoreLastConversation,
   );
+
+  // assistant 消息 → 对应的 Agent run（用于渲染执行卡片）
+  // 注意：chat 模式的 run 也有运行状态，但没有执行步骤，不应渲染 Agent 卡片
+  const runsByMessage = useMemo(() => {
+    const map: Record<string, RunState> = {};
+    for (const run of Object.values(runs)) {
+      if (run.mode === 'agent') {
+        map[run.messageId] = run;
+      }
+    }
+    return map;
+  }, [runs]);
 
   const viewportRef = useRef<HTMLDivElement>(null);
 
@@ -119,7 +153,11 @@ export function ChatPage() {
         ) : (
           <Stack gap="md">
             {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
+              <MessageBubble
+                key={message.id}
+                message={message}
+                run={runsByMessage[message.id]}
+              />
             ))}
           </Stack>
         )}
@@ -136,7 +174,19 @@ export function ChatPage() {
         running={running}
         onStop={() => void abort()}
         toolbarLeft={
-          <ModelSelect value={model} onChange={setModel} disabled={running} />
+          <Group gap="xs" wrap="nowrap">
+            <ModelSelect value={model} onChange={setModel} disabled={running} />
+            <SegmentedControl
+              size="xs"
+              data={[
+                { value: 'chat', label: 'Chat' },
+                { value: 'agent', label: 'Agent' },
+              ]}
+              value={mode}
+              onChange={(value) => setMode(value as ConversationMode)}
+              disabled={running}
+            />
+          </Group>
         }
       />
     </Box>

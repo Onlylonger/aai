@@ -40,4 +40,37 @@ CREATE TABLE `messages` (
 	FOREIGN KEY (`conversation_id`) REFERENCES `conversations`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `messages_conversation_seq_idx` ON `messages` (`conversation_id`,`seq`);
+CREATE UNIQUE INDEX `messages_conversation_seq_idx` ON `messages` (`conversation_id`,`seq`);--> statement-breakpoint
+CREATE TABLE `agent_runs` (
+	`id` text PRIMARY KEY NOT NULL,
+	`conversation_id` text NOT NULL,
+	`message_id` text NOT NULL,
+	`status` text DEFAULT 'pending' NOT NULL,
+	`plan` text,
+	`result` text,
+	`error` text,
+	`started_at` integer,
+	`completed_at` integer,
+	`created_at` integer NOT NULL,
+	FOREIGN KEY (`conversation_id`) REFERENCES `conversations`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `agent_runs_conversation_idx` ON `agent_runs` (`conversation_id`,`created_at`);--> statement-breakpoint
+CREATE TABLE `agent_steps` (
+	`id` text PRIMARY KEY NOT NULL,
+	`run_id` text NOT NULL,
+	`seq` integer NOT NULL,
+	`type` text NOT NULL,
+	`title` text NOT NULL,
+	`tool_name` text,
+	`input` text,
+	`output` text,
+	`status` text DEFAULT 'pending' NOT NULL,
+	`error` text,
+	`created_at` integer NOT NULL,
+	`completed_at` integer,
+	FOREIGN KEY (`run_id`) REFERENCES `agent_runs`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `agent_steps_run_seq_idx` ON `agent_steps` (`run_id`,`seq`);

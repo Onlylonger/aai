@@ -10,13 +10,19 @@ import { app } from 'electron';
 import { CHAT_CHANNELS, chatAbortSchema, chatSendSchema } from '@shared/chat';
 import { handleValidated } from '@main/infrastructure/ipc';
 
+import { agentRuntime } from '../agent/agentRuntime';
 import { runtimeManager } from '../runtime/runtimeManager';
 import { chatService } from './chatService';
 
 export function registerChatIpc() {
   handleValidated(CHAT_CHANNELS.send, chatSendSchema, (req, event) =>
-    runtimeManager.start('chat', event.sender, ({ runId, signal, emit }) =>
-      chatService.send(req, { runId, signal, emit }),
+    runtimeManager.start(
+      req.mode === 'agent' ? 'agent' : 'chat',
+      event.sender,
+      ({ runId, signal, emit }) =>
+        req.mode === 'agent'
+          ? agentRuntime.send(req, { runId, signal, emit })
+          : chatService.send(req, { runId, signal, emit }),
     ),
   );
 
