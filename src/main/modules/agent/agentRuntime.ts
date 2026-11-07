@@ -1,12 +1,15 @@
 /**
- * AgentRuntime（P1 骨架）：一次 Agent 执行 = 规划步骤 + 一次模型调用。
+ * AgentRuntime（P2）：带只读工具的多步执行。
  *
- * P1 暂未接入真实工具；先把「run / step 记录 + 事件协议 + 渲染」链路跑通。
- * 后续 P2 会在这里替换成「规划 → 工具 → 观察 → LLM → ...」的多步循环。
+ * 一次执行 = 规划步骤 +（模型步 / 工具调用步）* + 最终回答。
+ * AI SDK 负责「LLM → tool → observe → LLM」循环，本模块负责：
+ * - 把过程写入 agent_steps
+ * - 把 RunEvent 推给 renderer
  */
 import type { ModelMessage } from 'ai';
 import log from 'electron-log';
 
+import type { AgentStepStatus, AgentStepView } from '@shared/api/agent';
 import type {
   ChatMessage,
   RunEvent,
@@ -15,16 +18,20 @@ import type {
 } from '@shared/chat';
 import type { ChatRunContext, RunEventPayload } from '../chat/chatService';
 import { toModelMessages } from '../chat/messageHistory';
-import { errorMessage, streamAssistant } from '../chat/streamAssistant';
+import { errorMessage } from '../chat/streamAssistant';
 import { conversationService } from '../conversation/conversationService';
 
 import { agentService } from './agentService';
+import { streamAgent, type AgentStreamHandlers } from './agentStream';
+import { WORKSPACE_ROOT } from './tools/workspace';
 
-const SYSTEM_PROMPT =
-  'You are a helpful assistant. Answer the user request directly and clearly.';
+const SYSTEM_PROMPT = `You are an AI agent working inside a local workspace.
+Workspace root: ${WORKSPACE_ROOT}
+Paths passed to tools are relative to the workspace root.
+Use the provided read-only tools when you need to inspect files.
+Do not fabricate file contents. When you have enough information, answer the user directly and concisely.`;
 
-/** P1 的固定计划；P2 接入规划模型后替换为动态计划 */
-const P1_PLAN = '直接调用模型回答（P1 阶段暂未接入工具）';
+const PLAN = '按需调用只读工具（列目录 / 读文件 / 搜索），然后汇总回答';
 
 async function execute(opts: {
   req: SendMessageRequest;
@@ -36,49 +43,125 @@ async function execute(opts: {
 }) {
   const { req, messages, assistantMessage, runId, signal, emit } = opts;
 
+  // 未结束的 step（异常 / 取消时统一收尾）
+  const openSteps = new Set<string>();
+  const llmSteps = new Map<number, string>();
+  const toolSteps = new Map<string, string>();
+
+  const startStep = (input: {
+    type: AgentStepView['type'];
+    title: string;
+    toolName?: string;
+    input?: unknown;
+  }): AgentStepView => {
+    const step = agentService.addStep({
+      runId,
+      type: input.type,
+      title: input.title,
+      toolName: input.toolName,
+      input: input.input,
+      status: 'running',
+    });
+    openSteps.add(step.id);
+    emit({ type: 'step-start', step });
+    return step;
+  };
+
+  const finishStep = (
+    stepId: string,
+    status: AgentStepStatus,
+    patch: { output?: unknown; error?: string } = {},
+  ) => {
+    const step = agentService.updateStep(stepId, {
+      status,
+      output: patch.output,
+      error: patch.error,
+      completedAt: Date.now(),
+    });
+    openSteps.delete(stepId);
+    emit({
+      type: 'step-finish',
+      stepId,
+      status,
+      output: patch.output,
+      error: patch.error,
+    });
+    return step;
+  };
+
+  /** 异常 / 取消时，把仍未结束的步骤统一收尾 */
+  const closeOpenSteps = (status: AgentStepStatus, error?: string) => {
+    for (const stepId of [...openSteps]) {
+      finishStep(stepId, status, error ? { error } : {});
+    }
+  };
+
+  const handlers: AgentStreamHandlers = {
+    onTextDelta: (delta) => emit({ type: 'text-delta', delta }),
+    onReasoningDelta: (delta) => emit({ type: 'reasoning-delta', delta }),
+
+    onStepStart: (stepNumber) => {
+      const step = startStep({
+        type: 'llm',
+        title: `模型调用（第 ${stepNumber} 步）`,
+      });
+      llmSteps.set(stepNumber, step.id);
+    },
+
+    onStepFinish: (stepNumber, finishReason) => {
+      const stepId = llmSteps.get(stepNumber);
+      if (stepId) {
+        finishStep(stepId, 'done', { output: { finishReason } });
+      }
+    },
+
+    onToolCall: ({ toolCallId, toolName, input }) => {
+      const step = startStep({
+        type: 'tool',
+        title: `调用工具 ${toolName}`,
+        toolName,
+        input,
+      });
+      toolSteps.set(toolCallId, step.id);
+    },
+
+    onToolResult: ({ toolCallId, output }) => {
+      const stepId = toolSteps.get(toolCallId);
+      if (stepId) {
+        finishStep(stepId, 'done', { output });
+      }
+    },
+
+    onToolError: ({ toolCallId, error }) => {
+      const stepId = toolSteps.get(toolCallId);
+      if (stepId) {
+        finishStep(stepId, 'error', { error });
+      }
+    },
+  };
+
   try {
     emit({ type: 'run-start', mode: 'agent', model: req.model });
 
     // 1) 规划步骤
-    const planStep = agentService.addStep({
-      runId,
+    const planStep = startStep({
       type: 'plan',
       title: '任务规划',
-      status: 'running',
       input: { goal: req.text },
     });
-    emit({ type: 'step-start', step: planStep });
+    finishStep(planStep.id, 'done', { output: { plan: PLAN } });
+    emit({ type: 'agent-plan', plan: PLAN });
 
-    agentService.updateStep(planStep.id, {
-      status: 'done',
-      output: { plan: P1_PLAN },
-      completedAt: Date.now(),
-    });
-    emit({
-      type: 'step-finish',
-      stepId: planStep.id,
-      status: 'done',
-      output: { plan: P1_PLAN },
-    });
-    emit({ type: 'agent-plan', plan: P1_PLAN });
-
-    // 2) 模型调用步骤
-    const llmStep = agentService.addStep({
-      runId,
-      type: 'llm',
-      title: '调用模型',
-      status: 'running',
-    });
-    emit({ type: 'step-start', step: llmStep });
-
-    const outcome = await streamAssistant({
+    // 2) 多步执行（模型 + 工具）
+    const outcome = await streamAgent({
       model: req.model,
       instructions: SYSTEM_PROMPT,
       messages,
       signal,
-      onTextDelta: (delta) => emit({ type: 'text-delta', delta }),
-      onReasoningDelta: (delta) => emit({ type: 'reasoning-delta', delta }),
+      handlers,
     });
+
+    closeOpenSteps('done');
 
     if (outcome.type === 'finish') {
       conversationService.updateMessage(assistantMessage.id, {
@@ -86,17 +169,6 @@ async function execute(opts: {
         reasoning: outcome.reasoning || undefined,
         status: 'done',
       });
-
-      const output = {
-        finishReason: outcome.finishReason,
-        usage: outcome.usage,
-      };
-      agentService.updateStep(llmStep.id, {
-        status: 'done',
-        output,
-        completedAt: Date.now(),
-      });
-      emit({ type: 'step-finish', stepId: llmStep.id, status: 'done', output });
 
       agentService.updateRun(runId, {
         status: 'completed',
@@ -113,20 +185,10 @@ async function execute(opts: {
 
     if (outcome.type === 'error') {
       log.error('[agent] run failed', outcome.error);
+      closeOpenSteps('error', outcome.error);
       conversationService.updateMessage(assistantMessage.id, {
         text: outcome.text,
         reasoning: outcome.reasoning || undefined,
-        status: 'error',
-        error: outcome.error,
-      });
-      agentService.updateStep(llmStep.id, {
-        status: 'error',
-        error: outcome.error,
-        completedAt: Date.now(),
-      });
-      emit({
-        type: 'step-finish',
-        stepId: llmStep.id,
         status: 'error',
         error: outcome.error,
       });
@@ -139,16 +201,12 @@ async function execute(opts: {
       return;
     }
 
+    closeOpenSteps('cancelled');
     conversationService.updateMessage(assistantMessage.id, {
       text: outcome.text,
       reasoning: outcome.reasoning || undefined,
       status: 'aborted',
     });
-    agentService.updateStep(llmStep.id, {
-      status: 'cancelled',
-      completedAt: Date.now(),
-    });
-    emit({ type: 'step-finish', stepId: llmStep.id, status: 'cancelled' });
     agentService.updateRun(runId, {
       status: 'cancelled',
       completedAt: Date.now(),
@@ -157,6 +215,7 @@ async function execute(opts: {
   } catch (error) {
     const message = errorMessage(error);
     log.error('[agent] run crashed', message);
+    closeOpenSteps('error', message);
     conversationService.updateMessage(assistantMessage.id, {
       status: 'error',
       error: message,
@@ -215,7 +274,7 @@ export const agentRuntime = {
       id: runId,
       conversationId: conversation.id,
       messageId: assistantMessage.id,
-      plan: P1_PLAN,
+      plan: PLAN,
     });
 
     const emitEvent = (payload: RunEventPayload) =>

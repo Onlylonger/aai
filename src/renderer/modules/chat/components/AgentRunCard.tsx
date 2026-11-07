@@ -31,6 +31,17 @@ const STEP_META: Record<AgentStepStatus, { label: string; color: string }> = {
   cancelled: { label: '取消', color: 'gray' },
 };
 
+/** 工具输出预览：截断到 240 字符，避免大段 JSON 撑爆卡片 */
+function preview(value: unknown): string {
+  try {
+    const text =
+      typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    return text.length > 240 ? `${text.slice(0, 240)}…` : text;
+  } catch {
+    return String(value);
+  }
+}
+
 /**
  * Agent 执行卡片：折叠展示计划与步骤，不污染普通聊天正文。
  * 默认在运行中展开，结束后可手动折叠。
@@ -77,15 +88,34 @@ export function AgentRunCard({ run }: { run: RunState }) {
           {run.steps.map((step) => {
             const stepMeta = STEP_META[step.status];
             return (
-              <Group key={step.id} gap="xs" wrap="nowrap" align="flex-start">
-                <Badge size="xs" variant="light" color={stepMeta.color}>
-                  {stepMeta.label}
-                </Badge>
-                <Text size="xs">
-                  {step.title}
-                  {step.toolName ? ` · ${step.toolName}` : ''}
-                </Text>
-              </Group>
+              <Stack key={step.id} gap={2}>
+                <Group gap="xs" wrap="nowrap" align="flex-start">
+                  <Badge size="xs" variant="light" color={stepMeta.color}>
+                    {stepMeta.label}
+                  </Badge>
+                  <Text size="xs">
+                    {step.title}
+                    {step.toolName ? ` · ${step.toolName}` : ''}
+                  </Text>
+                </Group>
+
+                {step.type === 'tool' && step.output !== undefined && (
+                  <Text
+                    size="xs"
+                    c="dimmed"
+                    ml={6}
+                    style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                  >
+                    {preview(step.output)}
+                  </Text>
+                )}
+
+                {step.error && (
+                  <Text size="xs" c="red" ml={6}>
+                    {step.error}
+                  </Text>
+                )}
+              </Stack>
             );
           })}
 

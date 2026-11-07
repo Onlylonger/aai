@@ -2,12 +2,13 @@
 
 > 目标：一个会话容器，支持 Chat / Agent 两种工作模式；消息与 Agent 执行记录在内部分开存储，UI 上保持连续体验。
 >
-> **实施状态（2026-11-07）**：P0 / P1 已落地。
+> **实施状态（2026-11-07）**：P0 / P1 / P2 已落地。
 > P0：conversations / messages 表与 repo/service、ChatService 改走 conversationService、
 > `conversation:messages` 读库、启动恢复上次会话。
-> P1：agent_runs / agent_steps 表与 repo/service、AgentRuntime（P1 为固定计划 + 单次模型调用）、
-> `chat:send` 支持 mode='agent'、step 事件、渲染层 AgentRunCard 与 Chat/Agent 切换。
-> P2（只读工具与审批）待开始。
+> P1：agent_runs / agent_steps 表与 repo/service、AgentRuntime、`chat:send` 支持 mode='agent'、
+> step 事件、渲染层 AgentRunCard 与 Chat/Agent 切换。
+> P2：只读工具（列目录 / 读文件 / 搜索文本）、AI SDK 多步工具循环、工具步骤落库与卡片展示。
+> P3（会话列表、重试、右侧面板、自动判断）待开始。
 
 ## 0. 现状盘点
 
@@ -342,12 +343,17 @@ Runtime 循环：`plan → tool → observe → llm → ... → final`，上限�
 
 验收：同一会话内先 Chat 后 Agent 再 Chat，消息连续；Agent 卡片显示执行记录；取消可用。
 
-### P2：只读工具与审批
+### P2：只读工具与审批 ✅（审批留到 P3）
 
-- [ ] toolRegistry + 第一批只读工具
-- [ ] tool-call / tool-result 事件与步骤落库
-- [ ] 超时、步数上限、错误重试策略
-- [ ] （可选）审批按钮
+- [x] toolRegistry + 第一批只读工具（`list_directory` / `read_file` / `search_text`）
+- [x] 工具步骤落库（step-start / step-finish 事件携带 toolName / input / output）
+- [x] 步数上限（`stopWhen: stepCountIs(8)`）、文件大小 / 搜索数量限制、工具错误处理
+- [x] workspace 路径边界（拒绝 `../` 越界；跳过 node_modules 等目录）
+- [x] 卡片展示工具输出预览
+- [ ] （可选）审批按钮 → 与写工具一起在 P3 做
+
+说明：工具调用没有单独新增 `tool-call` / `tool-result` 事件，
+而是通过 `step-start` / `step-finish` 携带步骤信息，避免同一份数据重复推送。
 
 验收：让 Agent 扫描项目并生成报告；步骤可展开；失败可见、可取消。
 
