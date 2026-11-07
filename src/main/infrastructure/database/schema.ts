@@ -6,3 +6,5 @@
  * drizzle-kit 不认识 electron-vite 的 @main 别名。
  */
 export * from '../../modules/provider/providerTable';
+export * from '../../modules/conversation/conversationTable';
+export * from '../../modules/conversation/messageTable';

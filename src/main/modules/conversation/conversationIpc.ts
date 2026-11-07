@@ -7,16 +7,16 @@ import {
 } from '@shared/chat';
 import { handle, handleValidated } from '@main/infrastructure/ipc';
 
-import { conversationRepo } from './conversationRepo';
+import { conversationService } from './conversationService';
 
 export function registerConversationIpc() {
   handle(CONVERSATION_CHANNELS.list, () =>
-    conversationRepo.listConversations(),
+    conversationService.listConversations(),
   );
 
   handleValidated(
     CONVERSATION_CHANNELS.messages,
     conversationMessagesSchema,
-    ({ conversationId }) => conversationRepo.listMessages(conversationId),
+    ({ conversationId }) => conversationService.listMessages(conversationId),
   );
 }

@@ -75,12 +75,16 @@ export function ChatPage() {
   const setModel = useChatStore((s) => s.setModel);
   const send = useChatStore((s) => s.send);
   const abort = useChatStore((s) => s.abort);
+  const restoreLastConversation = useChatStore(
+    (s) => s.restoreLastConversation,
+  );
 
   const viewportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     subscribeRunEvents();
-  }, []);
+    void restoreLastConversation();
+  }, [restoreLastConversation]);
 
   // 新内容到达时滚动到底部
   const lastText = messages[messages.length - 1]?.text;

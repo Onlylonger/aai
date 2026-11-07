@@ -41,12 +41,15 @@ interface ChatState {
   setModel: (model: ModelRef) => void;
   newConversation: () => void;
   loadConversation: (conversationId: string) => Promise<void>;
+  /** 应用启动时恢复上次打开的会话 */
+  restoreLastConversation: () => Promise<void>;
   send: (text: string) => Promise<void>;
   abort: () => Promise<void>;
   applyRunEvent: (event: RunEvent) => void;
 }
 
 const MODEL_KEY = 'chat:lastModel';
+const CONVERSATION_KEY = 'chat:lastConversation';
 
 /** chat:send 进行中标记，以及期间到达的事件缓冲 */
 let sending = false;
@@ -87,6 +90,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   newConversation() {
+    localStorage.removeItem(CONVERSATION_KEY);
     set({
       conversationId: undefined,
       messages: [],
@@ -99,6 +103,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const messages = await window.api.invoke(CONVERSATION_CHANNELS.messages, {
       conversationId,
     });
+    localStorage.setItem(CONVERSATION_KEY, conversationId);
 
     // 该会话可能仍有 Run 在后台执行：恢复停止按钮的状态
     const activeRun = Object.values(get().runs).find(
@@ -112,6 +117,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeRunId: activeRun?.runId,
       sendError: undefined,
     });
+  },
+
+  async restoreLastConversation() {
+    const conversationId = localStorage.getItem(CONVERSATION_KEY);
+    if (!conversationId) return;
+
+    try {
+      await get().loadConversation(conversationId);
+    } catch {
+      // 会话可能已被删除，清理本地记录即可
+      localStorage.removeItem(CONVERSATION_KEY);
+    }
   },
 
   async send(text) {
@@ -130,6 +147,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         text,
         model,
       });
+      localStorage.setItem(CONVERSATION_KEY, res.conversationId);
       set((s) => ({
         conversationId: res.conversationId,
         activeRunId: res.runId,

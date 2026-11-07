@@ -20,7 +20,7 @@ import type {
   SendMessageRequest,
   SendMessageResponse,
 } from '@shared/chat';
-import { conversationRepo } from '../conversation/conversationRepo';
+import { conversationService } from '../conversation/conversationService';
 import { getLanguageModel } from '../provider/providerRegistry';
 
 /** 事件发射器：由调用方注入，ChatService 不直接依赖 BrowserWindow */
@@ -73,7 +73,7 @@ async function execute(opts: {
   const fail = (error: unknown) => {
     const message = errorMessage(error);
     log.error('[chat] run failed', message);
-    conversationRepo.updateMessage(assistantMessage.id, {
+    conversationService.updateMessage(assistantMessage.id, {
       text,
       reasoning: reasoning || undefined,
       status: 'error',
@@ -106,7 +106,7 @@ async function execute(opts: {
           fail(part.error);
           return;
         case 'abort':
-          conversationRepo.updateMessage(assistantMessage.id, {
+          conversationService.updateMessage(assistantMessage.id, {
             text,
             reasoning: reasoning || undefined,
             status: 'aborted',
@@ -114,7 +114,7 @@ async function execute(opts: {
           emit({ type: 'run-abort' });
           return;
         case 'finish':
-          conversationRepo.updateMessage(assistantMessage.id, {
+          conversationService.updateMessage(assistantMessage.id, {
             text,
             reasoning: reasoning || undefined,
             status: 'done',
@@ -136,14 +136,14 @@ async function execute(opts: {
     }
 
     // 兜底：流结束了但没有收到 finish / abort / error
-    conversationRepo.updateMessage(assistantMessage.id, {
+    conversationService.updateMessage(assistantMessage.id, {
       text,
       status: 'done',
     });
     emit({ type: 'run-finish', finishReason: 'other' });
   } catch (error) {
     if (signal.aborted) {
-      conversationRepo.updateMessage(assistantMessage.id, {
+      conversationService.updateMessage(assistantMessage.id, {
         text,
         status: 'aborted',
       });
@@ -167,29 +167,34 @@ export const chatService = {
 
     const conversation =
       (req.conversationId &&
-        conversationRepo.getConversation(req.conversationId)) ||
-      conversationRepo.createConversation({
+        conversationService.getConversation(req.conversationId)) ||
+      conversationService.createConversation({
         title: text.slice(0, 30),
-        mode: 'chat',
+        lastMode: 'chat',
       });
 
     // 历史消息要在写入新消息之前取出
-    const history = conversationRepo.listMessages(conversation.id);
+    const history = conversationService.listMessages(conversation.id);
 
-    const userMessage = conversationRepo.addMessage({
+    const userMessage = conversationService.addMessage({
       conversationId: conversation.id,
       role: 'user',
       text,
       status: 'done',
+      mode: 'chat',
     });
-    const assistantMessage = conversationRepo.addMessage({
+    const assistantMessage = conversationService.addMessage({
       conversationId: conversation.id,
       role: 'assistant',
       text: '',
       status: 'streaming',
+      mode: 'chat',
       model: req.model,
     });
-    conversationRepo.touchConversation(conversation.id);
+    conversationService.touchConversation(conversation.id, {
+      lastMode: 'chat',
+      lastModel: req.model,
+    });
 
     const emitEvent = (payload: RunEventPayload) =>
       emit({

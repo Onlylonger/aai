@@ -1,6 +1,10 @@
 # 统一会话（Chat + Agent）设计与实施计划
 
 > 目标：一个会话容器，支持 Chat / Agent 两种工作模式；消息与 Agent 执行记录在内部分开存储，UI 上保持连续体验。
+>
+> **实施状态（2026-11-07）**：P0 已落地——conversations / messages 表与 repo/service、
+> ChatService 改走 conversationService、`conversation:messages` 读库、启动恢复上次会话。
+> P1（Agent 骨架）待开始。
 
 ## 0. 现状盘点
 
@@ -312,13 +316,14 @@ Runtime 循环：`plan → tool → observe → llm → ... → final`，上限�
 
 ## 7. 实施阶段与验收
 
-### P0：会话与消息落库（不改 UI 体验）
+### P0：会话与消息落库（不改 UI 体验）✅
 
-- [ ] 新增 conversation/message 表 + repo/service
-- [ ] `conversationRepo` 内存实现替换为 SQLite
-- [ ] ChatService 改为通过 conversationService 读写
-- [ ] `conversation:messages` 返回历史
-- [ ] drizzle 迁移生成，重启后历史仍在
+- [x] 新增 conversation/message 表 + repo/service
+- [x] `conversationRepo` 内存实现替换为 SQLite
+- [x] ChatService 改为通过 conversationService 读写
+- [x] `conversation:messages` 返回历史
+- [x] drizzle 迁移生成，重启后历史仍在
+- [x] renderer 记住上次会话并在启动时恢复（`chat:lastConversation`）
 
 验收：新建会话 → 发消息 → 重启应用 → 历史消息完整恢复。
 

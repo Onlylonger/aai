@@ -30,13 +30,20 @@ export interface ChatMessage {
   status: MessageStatus;
   error?: string;
   model?: ModelRef;
+  /** 产生该消息时使用的模式 */
+  mode?: ConversationMode;
   createdAt: number;
 }
 
+/**
+ * 会话：Chat 与 Agent 共用的容器，本身不区分模式。
+ * lastMode / lastModel 只作为输入框的默认值，实际模式记录在每条消息上。
+ */
 export interface Conversation {
   id: string;
   title: string;
-  mode: ConversationMode;
+  lastMode: ConversationMode;
+  lastModel?: ModelRef;
   createdAt: number;
   updatedAt: number;
 }
